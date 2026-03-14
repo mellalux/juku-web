@@ -13,8 +13,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" type="image/png" href="./icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="./app-icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./app-icons/apple-touch-icon.png" />
     <title>Juku's World in WebGL</title>
     <meta
       name="description"
@@ -27,14 +27,14 @@
       content="Explore Juku's playful WebGL sports world with football action, running challenges, and touch-friendly controls."
     />
     <meta property="og:url" content="https://juku.mella.ee/" />
-    <meta property="og:image" content="https://juku.mella.ee/icons/icon-512.png" />
+    <meta property="og:image" content="https://juku.mella.ee/app-icons/icon-512.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Juku's World in WebGL" />
     <meta
       name="twitter:description"
       content="Explore Juku's playful WebGL sports world with football action, running challenges, and touch-friendly controls."
     />
-    <meta name="twitter:image" content="https://juku.mella.ee/icons/icon-512.png" />
+    <meta name="twitter:image" content="https://juku.mella.ee/app-icons/icon-512.png" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -48,6 +48,8 @@
         <div class="scoreboard-attack" id="attack-status">Runnak: lahtine pall</div>
         <div class="scoreboard-player" id="player-status">Pall: lahtine</div>
       </div>
+      <button class="install-app-button" id="install-app" type="button" hidden>Install App</button>
+      <div class="install-debug" id="install-debug" aria-live="polite">PWA: checking browser support...</div>
       <canvas id="scene"></canvas>
       <div class="touch-actions" id="touch-actions" aria-hidden="true">
         <div class="touch-toolbar">
@@ -95,6 +97,7 @@
     <script type="module" src="/src/main.js"></script>
   </body>
   </html>
+
 
 
 

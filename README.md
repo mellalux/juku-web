@@ -94,3 +94,42 @@ Current production URLs are configured for:
 
 No license file is currently included in this repository.
 
+## Deploy Checklist
+
+1. Bump the app version when cached PWA assets changed.
+
+```bash
+npm version patch
+```
+
+2. Build the app.
+
+```bash
+npm run build
+```
+
+3. Prepare a deployable release folder.
+
+```bash
+npm run deploy:package
+```
+
+4. Publish the full contents of `release/juku-web-v<version>/` or `dist/`, including:
+
+- `index.html`
+- `manifest.webmanifest`
+- `sw.js`
+- `version.json`
+- `icons/`
+- `assets/`
+
+5. Verify these production URLs return `200 OK`:
+
+- `https://juku.mella.ee/manifest.webmanifest`
+- `https://juku.mella.ee/sw.js`
+- `https://juku.mella.ee/version.json`
+- `https://juku.mella.ee/icons/icon-192.png`
+- `https://juku.mella.ee/icons/icon-512.png`
+
+6. If testing an updated PWA, unregister the old service worker in DevTools and hard refresh.
+

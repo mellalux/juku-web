@@ -4,48 +4,29 @@ const APP_SHELL = [
   "/index.html",
   "/manifest.webmanifest",
   "/version.json",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/apple-touch-icon.png"
+  "/app-icons/icon-192.png",
+  "/app-icons/icon-512.png",
+  "/app-icons/apple-touch-icon.png"
 ];
 
-function toCacheUrl(value) {
-  try {
-    const url = new URL(value, self.location.origin);
-    if (url.origin !== self.location.origin) {
-      return null;
-    }
-    if (url.pathname.endsWith("/sw.js")) {
-      return null;
-    }
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return null;
-  }
-}
+async function cacheAppShell() {
+  const cache = await caches.open(CACHE_NAME);
 
-async function collectAppShellAssets() {
-  const assets = new Set(APP_SHELL);
-  const response = await fetch("/", { cache: "no-store" });
-  const html = await response.text();
-  const assetPattern = /<(?:link|script|img|source)[^>]+(?:href|src)=["']([^"']+)["']/gi;
-
-  for (const match of html.matchAll(assetPattern)) {
-    const asset = toCacheUrl(match[1]);
-    if (asset) {
-      assets.add(asset);
-    }
-  }
-
-  return [...assets];
+  await Promise.allSettled(
+    APP_SHELL.map(async (asset) => {
+      const response = await fetch(asset, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${asset}: ${response.status}`);
+      }
+      await cache.put(asset, response.clone());
+    })
+  );
 }
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(CACHE_NAME);
-      const shellAssets = await collectAppShellAssets();
-      await cache.addAll(shellAssets);
+      await cacheAppShell();
       await self.skipWaiting();
     })()
   );
@@ -71,11 +52,18 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put("/", copy.clone());
+              cache.put("/index.html", copy);
+            });
+          }
           return response;
         })
-        .catch(() => caches.match("/index.html"))
+        .catch(async () => {
+          return (await caches.match("/")) || caches.match("/index.html");
+        })
     );
     return;
   }
@@ -87,17 +75,18 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(
     caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
+      if (cached) {
+        return cached;
+      }
 
-      return cached || fetchPromise;
+      return fetch(request).then((response) => {
+        if (response && response.status === 200) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      });
     })
   );
 });
+

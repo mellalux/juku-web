@@ -7,7 +7,8 @@
     "dev": "vite",
     "pwa:sync": "node ./scripts/sync-pwa-version.mjs",
     "build": "node ./scripts/sync-pwa-version.mjs && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:package": "node ./scripts/package-deploy.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"
@@ -16,3 +17,4 @@
     "vite": "^7.1.5"
   }
 }
+

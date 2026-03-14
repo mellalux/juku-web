@@ -1,0 +1,19 @@
+{
+  "version": "0.1.0",
+  "generatedAt": "2026-03-14T09:36:54.331Z",
+  "deployFiles": [
+    "index.html",
+    "manifest.webmanifest",
+    "sw.js",
+    "version.json",
+    "icons/",
+    "assets/"
+  ],
+  "productionChecks": [
+    "https://juku.mella.ee/manifest.webmanifest",
+    "https://juku.mella.ee/sw.js",
+    "https://juku.mella.ee/version.json",
+    "https://juku.mella.ee/icons/icon-192.png",
+    "https://juku.mella.ee/icons/icon-512.png"
+  ]
+}

@@ -4,9 +4,9 @@ const APP_SHELL = [
   "/index.html",
   "/manifest.webmanifest",
   "/version.json",
-  "/app-icons/icon-192.png",
-  "/app-icons/icon-512.png",
-  "/app-icons/apple-touch-icon.png"
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/apple-touch-icon.png"
 ];
 
 async function cacheAppShell() {
@@ -89,4 +89,3 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
-
