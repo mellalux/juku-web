@@ -66,7 +66,9 @@ npm run preview
 ## PWA Notes
 
 - The app includes a web app manifest at `public/manifest.webmanifest`.
-- The service worker at `public/sw.js` caches the app shell and discovers same-origin page assets from `index.html`.
+- The service worker at `public/sw.js` is generated from `public/sw.template.js`.
+- `npm run build` runs `npm run pwa:sync` first, which writes `public/sw.js` and `public/version.json` from the current `package.json` version.
+- The cache name is versioned, so bumping the app version is the intended way to roll PWA caches forward on deploy.
 - PWA install and offline support should be tested on a real HTTPS deployment.
 
 ## Social Metadata
@@ -91,3 +93,4 @@ Current production URLs are configured for:
 ## License
 
 No license file is currently included in this repository.
+

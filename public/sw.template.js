@@ -1,4 +1,4 @@
-const CACHE_NAME = "juku-pwa-v0.1.0";
+const CACHE_NAME = "juku-pwa-v__APP_VERSION__";
 const APP_SHELL = [
   "/",
   "/index.html",

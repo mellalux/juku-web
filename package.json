@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "pwa:sync": "node ./scripts/sync-pwa-version.mjs",
+    "build": "node ./scripts/sync-pwa-version.mjs && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
