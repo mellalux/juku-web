@@ -1,4 +1,4 @@
-const CACHE_NAME = "juku-pwa-v1";
+const CACHE_NAME = "juku-pwa-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,9 +8,45 @@ const APP_SHELL = [
   "./icons/apple-touch-icon.png"
 ];
 
+function toCacheUrl(value) {
+  try {
+    const url = new URL(value, self.location.origin);
+    if (url.origin !== self.location.origin) {
+      return null;
+    }
+    if (url.pathname.endsWith("/sw.js")) {
+      return null;
+    }
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
+}
+
+async function collectAppShellAssets() {
+  const assets = new Set(APP_SHELL);
+  const response = await fetch("./", { cache: "no-store" });
+  const html = await response.text();
+  const assetPattern = /<(?:link|script|img|source)[^>]+(?:href|src)=["']([^"']+)["']/gi;
+
+  for (const match of html.matchAll(assetPattern)) {
+    const asset = toCacheUrl(match[1]);
+    if (asset) {
+      assets.add(asset);
+    }
+  }
+
+  return [...assets];
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const shellAssets = await collectAppShellAssets();
+      await cache.addAll(shellAssets);
+      await self.skipWaiting();
+    })()
   );
 });
 
