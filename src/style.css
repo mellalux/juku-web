@@ -122,74 +122,7 @@ body,
 }
 
 
-.install-app-button {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  z-index: 11;
-  appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 999px;
-  padding: 12px 18px;
-  background: rgba(10, 16, 24, 0.84);
-  color: #f8fafc;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.28);
-  font: 800 13px/1 "Trebuchet MS", Verdana, sans-serif;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.install-app-button[hidden] {
-  display: none;
-}
-
-.install-debug {
-  position: fixed;
-  top: 68px;
-  right: 16px;
-  z-index: 11;
-  max-width: min(320px, calc(100vw - 32px));
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 16px;
-  background: rgba(8, 12, 18, 0.82);
-  color: #dbe7f4;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
-  font: 700 11px/1.35 "Trebuchet MS", Verdana, sans-serif;
-  letter-spacing: 0.03em;
-}
-
-.install-debug.is-error {
-  border-color: rgba(248, 113, 113, 0.35);
-  color: #fecaca;
-}
-
-.install-app-button:hover {
-  background: rgba(22, 34, 50, 0.92);
-}
-
-.install-app-button:active {
-  transform: translateY(1px);
-}
-
 @media (max-width: 720px) {
-  .install-app-button {
-    top: auto;
-    right: 12px;
-    bottom: 132px;
-    padding: 10px 14px;
-    font-size: 12px;
-  }
-  .install-debug {
-    top: auto;
-    right: 12px;
-    bottom: 184px;
-    max-width: min(300px, calc(100vw - 24px));
-  }
-
-
   .scoreboard {
     gap: 6px;
     padding: 9px 14px 10px;

@@ -111,9 +111,6 @@ const touchCameraButtons = Array.from(document.querySelectorAll(".touch-camera-b
 const touchFaceButtons = Array.from(document.querySelectorAll(".touch-face-button"));
 const touchJoystick = document.querySelector("#touch-joystick");
 const touchJoystickThumb = document.querySelector("#touch-joystick-thumb");
-const installAppButton = document.querySelector("#install-app");
-const installDebug = document.querySelector("#install-debug");
-let deferredInstallPrompt = null;
 const pipFrame = document.createElement("div");
 pipFrame.style.position = "fixed";
 pipFrame.style.pointerEvents = "none";
@@ -4719,90 +4716,10 @@ requestAnimationFrame((now) => {
   tick(now);
 });
 
-function isStandaloneApp() {
-  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-}
-
-function setInstallDebug(message, isError = false) {
-  if (!installDebug) {
-    return;
-  }
-
-  installDebug.textContent = `PWA: ${message}`;
-  installDebug.classList.toggle("is-error", isError);
-}
-
-function updateInstallButtonVisibility() {
-  if (!installAppButton) {
-    return;
-  }
-
-  installAppButton.hidden = !deferredInstallPrompt || isStandaloneApp();
-}
-
-if (installAppButton) {
-  installAppButton.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) {
-      return;
-    }
-
-    deferredInstallPrompt.prompt();
-    const choice = await deferredInstallPrompt.userChoice;
-    if (choice.outcome !== "accepted") {
-      deferredInstallPrompt = null;
-    }
-    updateInstallButtonVisibility();
-  });
-}
-
-window.addEventListener("beforeinstallprompt", (event) => {
-  event.preventDefault();
-  deferredInstallPrompt = event;
-  setInstallDebug("install prompt ready");
-  updateInstallButtonVisibility();
-});
-
-window.addEventListener("appinstalled", () => {
-  deferredInstallPrompt = null;
-  setInstallDebug("app installed");
-  updateInstallButtonVisibility();
-});
-
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", async () => {
-    setInstallDebug("registering service worker...");
-
-    try {
-      const registration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
-      setInstallDebug("service worker registered, waiting for activation");
-
-      navigator.serviceWorker.ready
-        .then(() => {
-          setInstallDebug("service worker ready, waiting for installability");
-        })
-        .catch((error) => {
-          setInstallDebug(`service worker readiness failed: ${error.message}`, true);
-        });
-
-      const installingWorker = registration.installing;
-      if (installingWorker) {
-        installingWorker.addEventListener("statechange", () => {
-          setInstallDebug(`service worker state: ${installingWorker.state}`);
-        });
-      } else if (registration.waiting) {
-        setInstallDebug("service worker waiting to activate");
-      } else if (registration.active) {
-        setInstallDebug("service worker active, waiting for installability");
-      }
-    } catch (error) {
-      setInstallDebug(`service worker failed: ${error.message}`, true);
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((error) => {
       console.error("Service worker registration failed", error);
-    }
-
-    updateInstallButtonVisibility();
+    });
   });
-} else if (!("serviceWorker" in navigator)) {
-  setInstallDebug("service workers are not supported", true);
-} else {
-  setInstallDebug("service worker runs only in production builds");
 }
