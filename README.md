@@ -1,5 +1,7 @@
 # Juku's World in WebGL
 
+![Juku](/images/Juku.png)
+
 A playful WebGL sports game built with `three` and `vite`.
 
 The project runs as a browser game with touch controls, mobile-friendly UI, and Progressive Web App support. It is set up to be deployed at `https://juku.mella.ee/`.
