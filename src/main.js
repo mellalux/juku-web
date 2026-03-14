@@ -58,11 +58,23 @@ const CAMERA_NAMES = {
   3: "3 TV 2IN1",
   4: "4 TOP DOWN"
 };
+const CAMERA_ZOOM_DEFAULTS = {
+  1: 1.28,
+  2: 1.06,
+  3: 0.98,
+  4: 1.72
+};
 const CAMERA_ZOOM_LIMITS = {
-  1: { min: 0.55, max: 2.8 },
-  2: { min: 0.8, max: 1.9 },
-  3: { min: 0.78, max: 1.55 },
-  4: { min: 1.1, max: 2.8 }
+  1: { min: 0.28, max: 2.8 },
+  2: { min: 0.42, max: 1.95 },
+  3: { min: 0.36, max: 1.86 },
+  4: { min: 0.56, max: 3.3 }
+};
+const CAMERA_ZOOM_DOLLY = {
+  1: 34,
+  2: 16,
+  3: 24,
+  4: 34
 };
 const FACE_NAMES = {
   auto: "AUTO",
@@ -248,13 +260,13 @@ const state = {
   swordYaw: 18,
   activeCam: 1,
   cameraYaw: 90,
-  cameraZoom: 1.28,
-  cameraZoomTarget: 1.28,
+  cameraZoom: CAMERA_ZOOM_DEFAULTS[1],
+  cameraZoomTarget: CAMERA_ZOOM_DEFAULTS[1],
   cameraZoomMemory: {
-    1: { zoom: 1.28, target: 1.28 },
-    2: { zoom: 1.06, target: 1.06 },
-    3: { zoom: 0.98, target: 0.98 },
-    4: { zoom: 1.72, target: 1.72 }
+    1: { zoom: CAMERA_ZOOM_DEFAULTS[1], target: CAMERA_ZOOM_DEFAULTS[1] },
+    2: { zoom: CAMERA_ZOOM_DEFAULTS[2], target: CAMERA_ZOOM_DEFAULTS[2] },
+    3: { zoom: CAMERA_ZOOM_DEFAULTS[3], target: CAMERA_ZOOM_DEFAULTS[3] },
+    4: { zoom: CAMERA_ZOOM_DEFAULTS[4], target: CAMERA_ZOOM_DEFAULTS[4] }
   },
   cam2Yaw: 0.678,
   cam2Distance: 9.25,
@@ -267,6 +279,8 @@ const state = {
   cam3SideBlend: 1,
   cam3SetupA: null,
   cam3SetupB: null,
+  topDownUpX: 0,
+  topDownUpZ: -1,
   touchMove: 0,
   touchTurn: 0,
   touchJump: false,
@@ -355,7 +369,12 @@ function syncTouchFaceButtons() {
 
 function setFaceMode(mode) {
   state.faceMode = mode;
-  setActiveCamera(2);
+  if (mode !== "auto") {
+    setActiveCamera(2);
+    state.cam2Yaw = THREE.MathUtils.degToRad(state.yaw);
+    state.cam2FocusX = state.x;
+    state.cam2FocusZ = state.z;
+  }
   syncTouchFaceButtons();
 }
 
@@ -381,7 +400,28 @@ function setCameraZoomTarget(nextTarget) {
 }
 
 function adjustTouchZoom(delta) {
-  setCameraZoomTarget(state.cameraZoomTarget + delta);
+  setCameraZoomTarget(state.cameraZoomTarget + delta * 1.35);
+}
+
+const cameraDollyPos = new THREE.Vector3();
+const cameraDollyDir = new THREE.Vector3();
+
+function getCameraDolly(cam, zoom) {
+  const base = CAMERA_ZOOM_DEFAULTS[cam] ?? CAMERA_ZOOM_DEFAULTS[1];
+  const scale = CAMERA_ZOOM_DOLLY[cam] ?? 0;
+  return (base - zoom) * scale;
+}
+
+function dollyCameraTowards(x, y, z, lookX, lookY, lookZ, dolly) {
+  cameraDollyPos.set(x, y, z);
+  if (Math.abs(dolly) < 0.0001) return cameraDollyPos;
+  cameraDollyDir.set(lookX - x, lookY - y, lookZ - z);
+  const dist = cameraDollyDir.length();
+  if (dist < 0.001) return cameraDollyPos;
+  const clamped = THREE.MathUtils.clamp(dolly, -dist * 2.4, dist - 0.35);
+  cameraDollyDir.multiplyScalar(1 / dist);
+  cameraDollyPos.addScaledVector(cameraDollyDir, clamped);
+  return cameraDollyPos;
 }
 
 function updateTouchEquipLabel() {
@@ -1302,8 +1342,8 @@ function makeFootballNameTag(text, backgroundColor, textColor = "#ffffff") {
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.76, depthWrite: false }));
-  sprite.scale.set(0.82, 0.21, 1);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.82, depthWrite: false }));
+  sprite.scale.set(0.9, 0.23, 1);
   sprite.renderOrder = 4;
   return sprite;
 }
@@ -3512,9 +3552,9 @@ function updateFootballGame(game, dt) {
     if (p.nameTag) {
       const cameraDist = cameraWorldPos.distanceTo(p.runner.root.position);
       const nearBallFade = THREE.MathUtils.clamp((8.6 - ballDist) / 4.4, 0, 1);
-      const cameraFade = THREE.MathUtils.clamp((42 - cameraDist) / 22, 0.22, 1);
+      const cameraFade = THREE.MathUtils.clamp((44 - cameraDist) / 22, 0.3, 1);
       const holderBoost = game.ballHolder === p ? 1 : 0;
-      const baseOpacity = 0.42 + 0.34 * nearBallFade;
+      const baseOpacity = 0.48 + 0.34 * nearBallFade;
       const labelOpacity = THREE.MathUtils.clamp((baseOpacity + holderBoost * 0.2) * cameraFade, 0, 1);
       p.nameTag.visible = labelOpacity > 0.08;
       p.nameTag.material.opacity = labelOpacity;
@@ -4413,15 +4453,22 @@ function updateCamera(dt) {
     state.cameraZoomMemory[state.activeCam].target = state.cameraZoomTarget;
   }
   const zoom = state.cameraZoom;
+  const dolly = getCameraDolly(state.activeCam, zoom);
 
   if (state.activeCam === 1) {
+    const lookX = 0;
+    const lookY = 2.05;
+    const lookZ = 0;
+    const baseZoom = CAMERA_ZOOM_DEFAULTS[1];
+    const dollyPos = dollyCameraTowards(0, 10.4 * baseZoom, 28.8 * baseZoom, lookX, lookY, lookZ, dolly);
     cameraRig.rotation.y = THREE.MathUtils.degToRad(state.cameraYaw);
-    camera.position.set(0, 10.4 * zoom, 28.8 * zoom);
-    camera.lookAt(0, 2.05, 0);
+    camera.position.copy(dollyPos);
+    camera.lookAt(lookX, lookY, lookZ);
   } else if (state.activeCam === 3) {
     const pack = getFootballBroadcastPack(footballGame);
-    const desiredA = makeFootballBroadcastSetup(1, pack, zoom);
-    const desiredB = makeFootballBroadcastSetup(-1, pack, zoom);
+    const broadcastZoom = CAMERA_ZOOM_DEFAULTS[3];
+    const desiredA = makeFootballBroadcastSetup(1, pack, broadcastZoom);
+    const desiredB = makeFootballBroadcastSetup(-1, pack, broadcastZoom);
     if (!state.cam3SetupA || !state.cam3SetupB) {
       state.cam3SetupA = { ...desiredA };
       state.cam3SetupB = { ...desiredB };
@@ -4450,9 +4497,10 @@ function updateCamera(dt) {
     }
 
     const activeSetup = state.cam3Side >= 0 ? state.cam3SetupA : state.cam3SetupB;
+    const dollyPos = dollyCameraTowards(activeSetup.x, activeSetup.y, activeSetup.z, activeSetup.lookX, activeSetup.lookY, activeSetup.lookZ, dolly);
     cameraRig.rotation.set(0, 0, 0);
     cameraRig.position.set(0, 0, 0);
-    camera.position.set(activeSetup.x, activeSetup.y, activeSetup.z);
+    camera.position.copy(dollyPos);
     camera.lookAt(activeSetup.lookX, activeSetup.lookY, activeSetup.lookZ);
   } else if (state.activeCam === 2) {
     state.cam2Distance = THREE.MathUtils.clamp(state.cam2Distance, 5.8, 16.5);
@@ -4485,29 +4533,43 @@ function updateCamera(dt) {
     const cam2Height = closeUpMode ? 3.02 : state.cam2Height * 0.9;
     const orbitX = Math.sin(state.cam2Yaw) * cam2Distance;
     const orbitZ = Math.cos(state.cam2Yaw) * cam2Distance;
-    const targetX = state.cam2FocusX + orbitX;
-    const targetY = closeUpMode ? cam2Height * zoom : state.jumpY + cam2Height * zoom;
-    const targetZ = state.cam2FocusZ + orbitZ;
+    const lookX = state.cam2FocusX;
     const lookY = closeUpMode ? JUKU_BASE_Y + 2.94 : JUKU_BASE_Y + 2.62 + state.jumpY * 0.22;
+    const lookZ = state.cam2FocusZ;
+    const baseZoom = CAMERA_ZOOM_DEFAULTS[2];
+    const targetYBase = closeUpMode ? cam2Height * baseZoom : state.jumpY + cam2Height * baseZoom;
+    const dollyPos = dollyCameraTowards(state.cam2FocusX + orbitX, targetYBase, state.cam2FocusZ + orbitZ, lookX, lookY, lookZ, dolly);
     cameraRig.position.set(0, 0, 0);
     cameraRig.rotation.set(0, 0, 0);
-    camera.position.x = THREE.MathUtils.damp(camera.position.x, targetX, closeUpMode ? 10 : 8.5, dt);
-    camera.position.y = THREE.MathUtils.damp(camera.position.y, targetY, closeUpMode ? 10 : 8.5, dt);
-    camera.position.z = THREE.MathUtils.damp(camera.position.z, targetZ, closeUpMode ? 10 : 8.5, dt);
-    camera.lookAt(state.cam2FocusX, lookY, state.cam2FocusZ);
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, dollyPos.x, closeUpMode ? 10 : 8.5, dt);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, dollyPos.y, closeUpMode ? 10 : 8.5, dt);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, dollyPos.z, closeUpMode ? 10 : 8.5, dt);
+    camera.lookAt(lookX, lookY, lookZ);
     state.cam2PrevX = state.x;
     state.cam2PrevZ = state.z;
   } else {
     cameraRig.position.set(0, 0, 0);
     cameraRig.rotation.set(0, 0, 0);
-    const topTargetX = 0;
-    const topTargetY = 44 + zoom * 20;
-    const topTargetZ = 0.01;
-    camera.position.x = THREE.MathUtils.damp(camera.position.x, topTargetX, 6.5, dt);
-    camera.position.y = THREE.MathUtils.damp(camera.position.y, topTargetY, 6.5, dt);
-    camera.position.z = THREE.MathUtils.damp(camera.position.z, topTargetZ, 6.5, dt);
-    camera.up.set(0, 0, -1);
-    camera.lookAt(0, JUKU_BASE_Y, 0);
+    const lookX = 0;
+    const lookY = JUKU_BASE_Y;
+    const lookZ = 0;
+    const baseY = 44 + CAMERA_ZOOM_DEFAULTS[4] * 20;
+    const dollyPos = dollyCameraTowards(0, baseY, 0.01, lookX, lookY, lookZ, dolly);
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, dollyPos.x, 6.5, dt);
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, dollyPos.y, 6.5, dt);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, dollyPos.z, 6.5, dt);
+    const topDownLandscape = window.innerWidth >= window.innerHeight;
+    const targetUpX = topDownLandscape ? 1 : 0;
+    const targetUpZ = topDownLandscape ? 0 : -1;
+    state.topDownUpX = THREE.MathUtils.damp(state.topDownUpX, targetUpX, 7.5, dt);
+    state.topDownUpZ = THREE.MathUtils.damp(state.topDownUpZ, targetUpZ, 7.5, dt);
+    const upLen = Math.hypot(state.topDownUpX, state.topDownUpZ);
+    camera.up.set(
+      upLen > 0.001 ? state.topDownUpX / upLen : targetUpX,
+      0,
+      upLen > 0.001 ? state.topDownUpZ / upLen : targetUpZ
+    );
+    camera.lookAt(lookX, lookY, lookZ);
   }
   if (cameraStatus) cameraStatus.textContent = `Active Camera: ${CAMERA_NAMES[state.activeCam]} | Zoom: ${zoom.toFixed(2)}x`;
 }

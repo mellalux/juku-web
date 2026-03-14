@@ -292,6 +292,13 @@ body,
   font: 800 15px/1 system-ui, sans-serif;
 }
 
+.touch-zoom-row .touch-mini-button {
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  font-size: 18px;
+}
+
 .touch-action-button {
   min-width: 96px;
   height: 96px;
@@ -373,6 +380,12 @@ body,
     width: 36px;
     height: 36px;
     font-size: 13px;
+  }
+
+  .touch-zoom-row .touch-mini-button {
+    width: 42px;
+    height: 42px;
+    font-size: 16px;
   }
 
   .touch-action-button {
