@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="et">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#06131f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <title>Juku's World in WebGL</title>
+    <meta
+      name="description"
+      content="Explore Juku's playful WebGL sports world with football action, running challenges, and touch-friendly controls."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Juku's World in WebGL" />
+    <meta
+      property="og:description"
+      content="Explore Juku's playful WebGL sports world with football action, running challenges, and touch-friendly controls."
+    />
+    <meta property="og:url" content="https://juku.mella.ee/" />
+    <meta property="og:image" content="https://juku.mella.ee/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Juku's World in WebGL" />
+    <meta
+      name="twitter:description"
+      content="Explore Juku's playful WebGL sports world with football action, running challenges, and touch-friendly controls."
+    />
+    <meta name="twitter:image" content="https://juku.mella.ee/icons/icon-512.png" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="scoreboard" id="scoreboard">
+        <div class="scoreboard-main">
+          <span class="scoreboard-team scoreboard-team-red">Bosbos</span>
+          <span class="scoreboard-score" id="score-status">0 : 0</span>
+          <span class="scoreboard-team scoreboard-team-blue">Volta</span>
+        </div>
+        <div class="scoreboard-attack" id="attack-status">Runnak: lahtine pall</div>
+        <div class="scoreboard-player" id="player-status">Pall: lahtine</div>
+      </div>
+      <canvas id="scene"></canvas>
+      <div class="touch-actions" id="touch-actions" aria-hidden="true">
+        <div class="touch-toolbar">
+          <div class="touch-floating-actions">
+            <button class="touch-action-button touch-jump" id="touch-jump" type="button">JUMP</button>
+            <button class="touch-action-button touch-equip" id="touch-equip" type="button">E</button>
+          </div>
+          <div class="touch-actions-row touch-face-row">
+            <span class="touch-actions-label">Faces:</span>
+            <div class="touch-faces" id="touch-faces">
+              <button class="touch-face-button" data-face="calm" type="button">Z</button>
+              <button class="touch-face-button" data-face="angry" type="button">X</button>
+              <button class="touch-face-button" data-face="surprised" type="button">C</button>
+              <button class="touch-face-button" data-face="happy" type="button">B</button>
+              <button class="touch-face-button" data-face="sad" type="button">N</button>
+            </div>
+            <span class="touch-face-name" id="touch-face-name">CALM</span>
+          </div>
+          <div class="touch-bottom-row">
+            <div class="touch-actions-row touch-camera-row">
+              <span class="touch-actions-label">Cameras:</span>
+              <div class="touch-cameras" id="touch-cameras">
+                <button class="touch-camera-button is-active" data-cam="1" type="button">1</button>
+                <button class="touch-camera-button" data-cam="2" type="button">2</button>
+                <button class="touch-camera-button" data-cam="3" type="button">3</button>
+                <button class="touch-camera-button" data-cam="4" type="button">4</button>
+              </div>
+              <span class="touch-camera-name" id="touch-camera-name">1 FREE</span>
+            </div>
+            <div class="touch-actions-row touch-zoom-row">
+              <span class="touch-actions-label">Zoom:</span>
+              <button class="touch-mini-button" id="touch-zoom-in" type="button">+</button>
+              <button class="touch-mini-button" id="touch-zoom-out" type="button">-</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="touch-joystick" id="touch-joystick" aria-hidden="true">
+        <div class="touch-joystick-base">
+          <div class="touch-joystick-core"></div>
+          <div class="touch-joystick-thumb" id="touch-joystick-thumb"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+  </html>
+
+
+
+
+
+
+
+
