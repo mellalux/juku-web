@@ -1,6 +1,6 @@
 # Juku's World in WebGL
 
-![Juku](/images/Juku.png)
+![Juku](/public/images/Juku.png)
 
 A playful WebGL sports game built with `three` and `vite`.
 
