@@ -103,7 +103,7 @@ const FOOTBALL_TEAM_DATA = {
     { number: 14, name: "Mark Randel" },
     { number: 19, name: "Mihkel Aron" },
     { number: 51, name: "Lucas Nikolas" },
-    { number: 7, name: "Teodor" }
+    { number: 7, name: "Teodor Oliver" }
   ]
 };
 const canvas = document.querySelector("#scene");
@@ -2214,23 +2214,23 @@ function updateScoreboard(game) {
     scoreStatus.textContent = `${game.redScore} : ${game.blueScore}`;
     attackStatus.className = "scoreboard-attack";
     if (game.attackingTeam === 1) {
-      attackStatus.textContent = `${TEAM_DISPLAY_NAMES.red} ründab`;
+      attackStatus.textContent = `${TEAM_DISPLAY_NAMES.red} attacks`;
       attackStatus.classList.add("scoreboard-attack-red");
     } else if (game.attackingTeam === -1) {
-      attackStatus.textContent = `${TEAM_DISPLAY_NAMES.blue} ründab`;
+      attackStatus.textContent = `${TEAM_DISPLAY_NAMES.blue} attacks`;
       attackStatus.classList.add("scoreboard-attack-blue");
     } else {
-      attackStatus.textContent = "Rünnak: lahtine pall";
+      attackStatus.textContent = "Attack: loose ball";
     }
   }
   if (!playerStatus) return;
 
   playerStatus.className = "scoreboard-player";
   if (game.ballHolder) {
-    playerStatus.textContent = `Pall: ${game.ballHolder.shirtNumber} - ${game.ballHolder.displayName}`;
+    playerStatus.textContent = `Ball: ${game.ballHolder.shirtNumber} - ${game.ballHolder.displayName}`;
     playerStatus.classList.add(game.ballHolder.team === 1 ? "scoreboard-player-red" : "scoreboard-player-blue");
   } else {
-    playerStatus.textContent = "Pall: lahtine";
+    playerStatus.textContent = "Ball: loose";
   }
 }
 
