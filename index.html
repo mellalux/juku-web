@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="et">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -45,8 +45,15 @@
           <span class="scoreboard-score" id="score-status">0 : 0</span>
           <span class="scoreboard-team scoreboard-team-blue">Volta</span>
         </div>
-        <div class="scoreboard-attack" id="attack-status">Runnak: lahtine pall</div>
-        <div class="scoreboard-player" id="player-status">Pall: lahtine</div>
+        <div class="scoreboard-attack" id="attack-status">Attack: loose ball</div>
+        <div class="scoreboard-player" id="player-status">Ball: loose</div>
+        <div class="scoreboard-mode" id="behavior-mode">
+          <span class="scoreboard-mode-label">Style</span>
+          <div class="scoreboard-mode-toggle" role="group" aria-label="Football behavior style">
+            <button class="scoreboard-mode-button is-active" id="behavior-realistic" data-behavior="realistic" type="button">Realistic</button>
+            <button class="scoreboard-mode-button" id="behavior-arcade" data-behavior="arcade" type="button">Arcade</button>
+          </div>
+        </div>
       </div>
       <canvas id="scene"></canvas>
       <div class="touch-actions" id="touch-actions" aria-hidden="true">

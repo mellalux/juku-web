@@ -79,6 +79,47 @@ body,
   gap: 14px;
 }
 
+.scoreboard-mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.scoreboard-mode-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #bfdbfe;
+}
+
+.scoreboard-mode-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.scoreboard-mode-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: transparent;
+  color: #cbd5e1;
+  font: 700 11px/1 "Trebuchet MS", Verdana, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.scoreboard-mode-button.is-active {
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.94) 0%, rgba(226, 232, 240, 0.9) 100%);
+  color: #0f172a;
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.18);
+}
+
 .scoreboard-attack {
   min-width: 168px;
   text-align: center;
@@ -145,6 +186,16 @@ body,
 
   .scoreboard-player {
     min-width: 146px;
+    font-size: 10px;
+  }
+
+  .scoreboard-mode {
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .scoreboard-mode-button {
+    padding: 5px 8px;
     font-size: 10px;
   }
 }

@@ -32,7 +32,7 @@ const FOOTBALL_PLAYER_COUNT = 12;
 const FOOTBALL_GOAL_WIDTH = 5.8;
 const FOOTBALL_GOAL_HEIGHT = 2.45;
 const FOOTBALL_GOAL_DEPTH = 2;
-const FOOTBALL_BALL_RADIUS = 0.22;
+const FOOTBALL_BALL_RADIUS = 0.24;
 const GOAL_CELEBRATION_DURATION = 25;
 const GOAL_OVERLAY_DURATION = 15;
 const ARCADE_SCORING_BOOST = 1.16;
@@ -88,30 +88,189 @@ const TEAM_DISPLAY_NAMES = {
   red: "Bosbos",
   blue: "Volta"
 };
+const FOOTBALL_BEHAVIOR_PRESET = "arcade"; // "realistic";
+const FOOTBALL_BEHAVIOR_PRESETS = {
+  realistic: {
+    defenderStepDepthScale: 1,
+    defenderStepRangeScale: 1,
+    defenderCoverLerpScale: 1,
+    defenderSpeedBonus: 0,
+    progressiveChoiceBias: 0,
+    longPassDistMin: 6.2,
+    longPassForwardMin: 1.15,
+    longPassScoreMin: 3.95,
+    passDistanceTriggerBase: 3.4,
+    passDistanceTriggerVariance: 0.7,
+    passScoreBase: 4.25,
+    passScoreDistanceDiscount: 0.07,
+    passPowerBonusBase: 0.28,
+    passPowerBonusScale: 0.12
+  },
+  arcade: {
+    defenderStepDepthScale: 0.62,
+    defenderStepRangeScale: 1.28,
+    defenderCoverLerpScale: 1.28,
+    defenderSpeedBonus: 0.12,
+    progressiveChoiceBias: 0.22,
+    longPassDistMin: 5.2,
+    longPassForwardMin: 0.85,
+    longPassScoreMin: 3.35,
+    passDistanceTriggerBase: 2.6,
+    passDistanceTriggerVariance: 0.95,
+    passScoreBase: 3.7,
+    passScoreDistanceDiscount: 0.11,
+    passPowerBonusBase: 0.4,
+    passPowerBonusScale: 0.18
+  }
+};
+let FOOTBALL_BEHAVIOR = FOOTBALL_BEHAVIOR_PRESETS[FOOTBALL_BEHAVIOR_PRESET] ?? FOOTBALL_BEHAVIOR_PRESETS.realistic;
+const FOOTBALL_ROLE_LABELS = {
+  keeper: "Goalkeeper",
+  defender: "Defender",
+  midfielder: "Midfielder",
+  attacker: "Attacker"
+};
 const FOOTBALL_TEAM_DATA = {
   red: [
-    { number: 1, name: "Markus Saar" },
-    { number: 4, name: "Karl Tamm" },
-    { number: 17, name: "Rene Kask" },
-    { number: 9, name: "Artur Lepp" },
-    { number: 11, name: "Martin Kuusk" },
-    { number: 27, name: "Sander Oja" }
+    { number: 1, name: "Markus Saar", role: "keeper", positionLabel: "Goalkeeper", preferredFoot: "right", trait: "reflex", speedProfile: "balanced" },
+    { number: 4, name: "Karl Tamm", role: "defender", positionLabel: "Center Back", preferredFoot: "right", trait: "tackle", speedProfile: "balanced" },
+    { number: 17, name: "Rene Kask", role: "defender", positionLabel: "Full Back", preferredFoot: "left", trait: "press", speedProfile: "fast" },
+    { number: 9, name: "Artur Lepp", role: "attacker", positionLabel: "Left Forward", preferredFoot: "left", trait: "dribble", attackProfile: "playmaker", speedProfile: "fast" },
+    { number: 11, name: "Martin Kuusk", role: "attacker", positionLabel: "Striker", preferredFoot: "right", trait: "finish", attackProfile: "poacher", speedProfile: "balanced" },
+    { number: 27, name: "Sander Oja", role: "attacker", positionLabel: "Right Forward", preferredFoot: "right", trait: "pace", attackProfile: "runner", speedProfile: "sprinter" }
   ],
   blue: [
-    { number: 1, name: "Rasmus Kivi" },
-    { number: 5, name: "Oliver Kask" },
-    { number: 14, name: "Mark Randel" },
-    { number: 19, name: "Mihkel Aron" },
-    { number: 51, name: "Lucas Nikolas" },
-    { number: 7, name: "Teodor Oliver" }
+    { number: 1, name: "Rasmus Kivi", role: "keeper", positionLabel: "Goalkeeper", preferredFoot: "right", trait: "reflex", speedProfile: "balanced" },
+    { number: 5, name: "Oliver Kask", role: "defender", positionLabel: "Center Back", preferredFoot: "right", trait: "mark", speedProfile: "balanced" },
+    { number: 14, name: "Mark Randel", role: "defender", positionLabel: "Full Back", preferredFoot: "left", trait: "intercept", speedProfile: "fast" },
+    { number: 19, name: "Mihkel Aron", role: "attacker", positionLabel: "Left Forward", preferredFoot: "left", trait: "dribble", attackProfile: "playmaker", speedProfile: "fast" },
+    { number: 51, name: "Lucas Nikolas", role: "attacker", positionLabel: "Striker", preferredFoot: "right", trait: "finish", attackProfile: "poacher", speedProfile: "balanced" },
+    { number: 7, name: "Teodor Oliver", role: "attacker", positionLabel: "Right Forward", preferredFoot: "right", trait: "pace", attackProfile: "runner", speedProfile: "sprinter" }
   ]
 };
+
+function getDefaultFootballRole(lane) {
+  if (lane === 0) return "keeper";
+  if (lane <= 2) return "defender";
+  return "attacker";
+}
+
+function normalizeFootballRosterEntry(entry, teamName, lane) {
+  const fallbackName = teamName === "red" ? `Red ${lane + 1}` : `Blue ${lane + 1}`;
+  const fallbackRole = getDefaultFootballRole(lane);
+  const rosterEntry = entry ?? {};
+  const role = rosterEntry.role ?? fallbackRole;
+  return {
+    number: rosterEntry.number ?? 0,
+    name: rosterEntry.name ?? fallbackName,
+    role,
+    positionLabel: rosterEntry.positionLabel ?? FOOTBALL_ROLE_LABELS[role] ?? role,
+    preferredFoot: rosterEntry.preferredFoot ?? "right",
+    trait: rosterEntry.trait ?? null,
+    speedProfile: rosterEntry.speedProfile ?? "balanced",
+    attackProfile: rosterEntry.attackProfile ?? null,
+    homeX: rosterEntry.homeX ?? null,
+    homeZ: rosterEntry.homeZ ?? null
+  };
+}
+
+function getFootballSpeedProfileModifiers(speedProfile) {
+  switch (speedProfile) {
+    case "slow":
+      return { speedBias: -0.14, burstBoost: -0.04 };
+    case "fast":
+      return { speedBias: 0.1, burstBoost: 0.05 };
+    case "sprinter":
+      return { speedBias: 0.18, burstBoost: 0.1 };
+    default:
+      return { speedBias: 0, burstBoost: 0 };
+  }
+}
+
+function getFootballTraitModifiers(trait, role) {
+  const modifiers = {
+    shotHunger: 0,
+    speedBias: 0,
+    pressBias: 0,
+    burstBoost: 0,
+    passVision: 0,
+    tackleBias: 0,
+    saveReach: 0,
+    shotPower: 0,
+    shotAccuracy: 0,
+    crossQuality: 0,
+    dribbleBias: 0
+  };
+  switch (trait) {
+    case "pace":
+      modifiers.speedBias += 0.12;
+      modifiers.burstBoost += 0.08;
+      modifiers.dribbleBias += 0.08;
+      break;
+    case "finish":
+      modifiers.shotHunger += 0.16;
+      modifiers.shotPower += 0.18;
+      modifiers.shotAccuracy += 0.14;
+      break;
+    case "dribble":
+      modifiers.speedBias += 0.05;
+      modifiers.dribbleBias += 0.18;
+      break;
+    case "press":
+      modifiers.pressBias += 0.16;
+      modifiers.tackleBias += 0.08;
+      break;
+    case "tackle":
+      modifiers.pressBias += 0.08;
+      modifiers.tackleBias += 0.18;
+      break;
+    case "intercept":
+      modifiers.pressBias += 0.1;
+      modifiers.passVision += 0.06;
+      modifiers.tackleBias += 0.12;
+      break;
+    case "mark":
+      modifiers.pressBias += 0.08;
+      modifiers.tackleBias += 0.1;
+      break;
+    case "reflex":
+      modifiers.saveReach += role === "keeper" ? 0.22 : 0;
+      break;
+  }
+  return modifiers;
+}
+
+function getFootballFootedness(player, ball, targetX = null) {
+  const preferred = player?.preferredFoot === "left" ? "left" : "right";
+  let naturalSide = preferred === "left" ? 1 : -1;
+  let weakFoot = false;
+  if (ball && player?.runner?.root) {
+    const localBall = player.runner.root.worldToLocal(ball.position.clone());
+    const ballSide = localBall.x >= 0 ? 1 : -1;
+    const towardSide = targetX == null ? ballSide : Math.sign((targetX - player.runner.root.position.x) || ballSide || naturalSide);
+    if (towardSide && towardSide !== naturalSide) {
+      weakFoot = true;
+      naturalSide = towardSide;
+    }
+  }
+  return {
+    kickSide: naturalSide,
+    weakFoot,
+    preferred
+  };
+}
+
+function getFootballPlayerLabel(player) {
+  if (!player) return "";
+  return player.positionLabel ? `${player.shirtNumber} - ${player.displayName} (${player.positionLabel})` : `${player.shirtNumber} - ${player.displayName}`;
+}
 const canvas = document.querySelector("#scene");
 const cameraStatus = document.querySelector("#camera-status");
 const faceStatus = document.querySelector("#face-status");
 const scoreStatus = document.querySelector("#score-status");
 const attackStatus = document.querySelector("#attack-status");
 const playerStatus = document.querySelector("#player-status");
+const behaviorModeButtons = Array.from(document.querySelectorAll("[data-behavior]"));
 const touchActions = document.querySelector("#touch-actions");
 const touchJumpButton = document.querySelector("#touch-jump");
 const touchEquipButton = document.querySelector("#touch-equip");
@@ -275,10 +434,13 @@ const state = {
   cam2PrevZ: -7.8,
   cam2FocusX: FOOTBALL_FIELD_HALF_WIDTH + 5.2,
   cam2FocusZ: -7.8,
+  cam2Motion: 0,
+  cam2CloseUp: false,
   cam3Side: 1,
   cam3SideBlend: 1,
   cam3SetupA: null,
   cam3SetupB: null,
+  cam3SwitchCooldown: 0,
   topDownUpX: 0,
   topDownUpZ: -1,
   touchMove: 0,
@@ -298,8 +460,19 @@ const state = {
   tongueTimer: 0,
   nextTongueEvent: 0.9 + Math.random() * 2.8,
   tonguePhase: Math.random() * Math.PI * 2,
+  behaviorPreset: FOOTBALL_BEHAVIOR_PRESET,
   lastT: performance.now()
 };
+
+function setFootballBehaviorPreset(preset) {
+  if (!FOOTBALL_BEHAVIOR_PRESETS[preset]) return;
+  state.behaviorPreset = preset;
+  FOOTBALL_BEHAVIOR = FOOTBALL_BEHAVIOR_PRESETS[preset];
+  for (const button of behaviorModeButtons) {
+    button.classList.toggle("is-active", button.dataset.behavior === preset);
+    button.setAttribute("aria-pressed", button.dataset.behavior === preset ? "true" : "false");
+  }
+}
 
 cameraRig.position.set(0, 11.2, 0);
 cameraRig.rotation.y = THREE.MathUtils.degToRad(state.cameraYaw);
@@ -374,6 +547,8 @@ function setFaceMode(mode) {
     state.cam2Yaw = THREE.MathUtils.degToRad(state.yaw);
     state.cam2FocusX = state.x;
     state.cam2FocusZ = state.z;
+    state.cam2Motion = 0;
+    state.cam2CloseUp = true;
   }
   syncTouchFaceButtons();
 }
@@ -444,6 +619,15 @@ function setActiveCamera(cam) {
   if (memory) {
     state.cameraZoom = clampCameraZoom(cam, memory.zoom);
     state.cameraZoomTarget = clampCameraZoom(cam, memory.target);
+  }
+  if (cam === 2) {
+    state.cam2PrevX = state.x;
+    state.cam2PrevZ = state.z;
+    state.cam2FocusX = state.x;
+    state.cam2FocusZ = state.z;
+    state.cam2Motion = 0;
+    state.cam2CloseUp = true;
+    state.cam2Yaw = THREE.MathUtils.degToRad(state.yaw);
   }
   syncTouchCameraButtons();
 }
@@ -525,7 +709,16 @@ if (touchFaceButtons.length) {
     });
   }
 }
+if (behaviorModeButtons.length) {
+  for (const button of behaviorModeButtons) {
+    button.addEventListener("pointerdown", (event) => {
+      if (button.dataset.behavior) setFootballBehaviorPreset(button.dataset.behavior);
+      event.preventDefault();
+    });
+  }
+}
 syncTouchFaceButtons();
+setFootballBehaviorPreset(state.behaviorPreset);
 updateTouchEquipLabel();
 
 if (touchZoomInButton) {
@@ -2029,14 +2222,15 @@ function buildFootballGame() {
     const team = i < perTeam ? 1 : -1;
     const teamName = team === 1 ? "red" : "blue";
     const lane = i % perTeam;
-    const rosterEntry = FOOTBALL_TEAM_DATA[teamName][lane] ?? { number: 0, name: teamName === "red" ? `Punane ${lane + 1}` : `Sinine ${lane + 1}` };
-    const role = lane === 0 ? "keeper" : lane <= 2 ? "defender" : "attacker";
-    const homeX = homeXByLane[lane] ?? 0;
-    const homeZ = role === "keeper"
+    const rosterEntry = normalizeFootballRosterEntry(FOOTBALL_TEAM_DATA[teamName][lane], teamName, lane);
+    const role = rosterEntry.role;
+    const homeX = rosterEntry.homeX ?? (homeXByLane[lane] ?? 0);
+    const defaultHomeZ = role === "keeper"
       ? -team * (FOOTBALL_FIELD_HALF_LENGTH - 5.1)
       : role === "defender"
         ? -team * (FOOTBALL_FIELD_HALF_LENGTH * 0.44 - Math.abs(homeX) * 0.05) + (Math.random() - 0.5) * 0.8
         : -team * (FOOTBALL_FIELD_HALF_LENGTH * 0.22 - Math.abs(homeX) * 0.04) + (Math.random() - 0.5) * 1.1;
+    const homeZ = rosterEntry.homeZ ?? defaultHomeZ;
     const runner = scaleRunner(buildRunner({
       shirt: team === 1 ? 0xcf3a2f : 0x1d58b4,
       shorts: team === 1 ? 0x6a1f1b : 0x163869,
@@ -2055,13 +2249,15 @@ function buildFootballGame() {
     runner.torsoPivot.add(backNumber);
     group.add(runner.root);
     const attackerProfile = role === "attacker"
-      ? Math.abs(homeX) < 0.4
+      ? rosterEntry.attackProfile ?? (Math.abs(homeX) < 0.4
         ? "poacher"
         : homeX < 0
           ? "playmaker"
-          : "runner"
+          : "runner")
       : null;
-    const shotHunger = role === "attacker"
+    const traitModifiers = getFootballTraitModifiers(rosterEntry.trait, role);
+    const speedProfileModifiers = getFootballSpeedProfileModifiers(rosterEntry.speedProfile);
+    const shotHunger = (role === "attacker"
       ? attackerProfile === "poacher"
         ? 1.28 + Math.random() * 0.22
         : attackerProfile === "runner"
@@ -2069,13 +2265,20 @@ function buildFootballGame() {
           : 0.84 + Math.random() * 0.16
       : role === "defender"
         ? 0.38 + Math.random() * 0.18
-        : 0.18 + Math.random() * 0.12;
+        : 0.18 + Math.random() * 0.12) + traitModifiers.shotHunger;
+    const basePressBias = role === "attacker" ? 0.86 + Math.random() * 0.48 : role === "defender" ? 0.72 + Math.random() * 0.3 : 0.58 + Math.random() * 0.2;
+    const baseSpeedBias = role === "attacker" ? 1.02 + Math.random() * 0.34 : role === "defender" ? 0.94 + Math.random() * 0.28 : 0.84 + Math.random() * 0.18;
+    const baseBurstBoost = role === "attacker" ? 0.18 + Math.random() * 0.08 : role === "defender" ? 0.12 + Math.random() * 0.08 : 0.06 + Math.random() * 0.05;
     players.push({
       runner,
       team,
       teamName,
       shirtNumber: rosterEntry.number,
       displayName: rosterEntry.name,
+      positionLabel: rosterEntry.positionLabel,
+      preferredFoot: rosterEntry.preferredFoot,
+      trait: rosterEntry.trait,
+      speedProfile: rosterEntry.speedProfile,
       goalsScored: 0,
       nameTag,
       home: new THREE.Vector3(homeX, 0, homeZ),
@@ -2085,21 +2288,28 @@ function buildFootballGame() {
       cycle: Math.random() * Math.PI * 2,
       kickCooldown: Math.random() * 0.8,
       kickBlend: 0,
-      kickSide: lane % 2 === 0 ? 1 : -1,
+      kickSide: rosterEntry.preferredFoot === "left" ? 1 : -1,
       role,
       attackerProfile,
       shotHunger,
       roamX: role === "attacker" ? (Math.random() - 0.5) * 1.9 : (Math.random() - 0.5) * 1.1,
       roamZ: role === "attacker" ? (Math.random() - 0.5) * 1.4 : (Math.random() - 0.5) * 0.8,
       laneBias: homeX * 0.34 + (Math.random() - 0.5) * 0.24,
-      pressBias: role === "attacker" ? 0.86 + Math.random() * 0.48 : role === "defender" ? 0.72 + Math.random() * 0.3 : 0.58 + Math.random() * 0.2,
-      speedBias: role === "attacker" ? 0.95 + Math.random() * 0.24 : role === "defender" ? 0.88 + Math.random() * 0.2 : 0.82 + Math.random() * 0.16,
+      pressBias: basePressBias + traitModifiers.pressBias,
+      speedBias: baseSpeedBias + traitModifiers.speedBias + speedProfileModifiers.speedBias,
       tempoPhase: Math.random() * Math.PI * 2,
       tempoRate: 0.85 + Math.random() * 0.65,
       tempoJitter: 0.92 + Math.random() * 0.2,
       burstTimer: Math.random() * 0.35,
       burstCooldown: 0.45 + Math.random() * 1.25,
-      burstBoost: role === "attacker" ? 0.18 + Math.random() * 0.08 : role === "defender" ? 0.12 + Math.random() * 0.08 : 0.06 + Math.random() * 0.05,
+      burstBoost: baseBurstBoost + traitModifiers.burstBoost + speedProfileModifiers.burstBoost,
+      passVision: traitModifiers.passVision,
+      tackleBias: traitModifiers.tackleBias,
+      saveReach: traitModifiers.saveReach,
+      shotPowerBias: traitModifiers.shotPower,
+      shotAccuracyBias: traitModifiers.shotAccuracy,
+      crossQualityBias: traitModifiers.crossQuality,
+      dribbleBias: traitModifiers.dribbleBias,
       sprintBlend: 0,
       breakRunBias: role === "attacker"
         ? (attackerProfile === "runner" ? 1.25 : attackerProfile === "poacher" ? 1.12 : 0.94) + Math.random() * 0.18
@@ -2227,7 +2437,7 @@ function updateScoreboard(game) {
 
   playerStatus.className = "scoreboard-player";
   if (game.ballHolder) {
-    playerStatus.textContent = `Ball: ${game.ballHolder.shirtNumber} - ${game.ballHolder.displayName}`;
+    playerStatus.textContent = `Ball: ${getFootballPlayerLabel(game.ballHolder)}`;
     playerStatus.classList.add(game.ballHolder.team === 1 ? "scoreboard-player-red" : "scoreboard-player-blue");
   } else {
     playerStatus.textContent = "Ball: loose";
@@ -2275,6 +2485,85 @@ function setGoalOverlayState(active, scorer = null, team = 0) {
   goalOverlayScorer.style.color = team === 1 ? "#fca5a5" : team === -1 ? "#93c5fd" : "#dbeafe";
 }
 
+function resolveFootballPlayerSpacing(players, dt, pushScale = 1) {
+  for (let i = 0; i < players.length; i += 1) {
+    const a = players[i];
+    for (let j = i + 1; j < players.length; j += 1) {
+      const b = players[j];
+      const dx = a.runner.root.position.x - b.runner.root.position.x;
+      const dz = a.runner.root.position.z - b.runner.root.position.z;
+      const dist = Math.hypot(dx, dz);
+      const minDist = FOOTBALL_PERSON_RADIUS * 2.02;
+      if (dist >= minDist || dist <= 0.0001) continue;
+      const nx = dx / dist;
+      const nz = dz / dist;
+      const overlap = minDist - dist;
+      const separate = overlap * 0.5;
+      a.runner.root.position.x += nx * separate;
+      a.runner.root.position.z += nz * separate;
+      b.runner.root.position.x -= nx * separate;
+      b.runner.root.position.z -= nz * separate;
+      const push = overlap * 2.4 * pushScale * dt;
+      a.vx += nx * push;
+      a.vz += nz * push;
+      b.vx -= nx * push;
+      b.vz -= nz * push;
+    }
+  }
+  for (let i = 0; i < players.length; i += 1) {
+    const p = players[i];
+    p.runner.root.position.x = THREE.MathUtils.clamp(p.runner.root.position.x, -FOOTBALL_FIELD_HALF_WIDTH + 0.4, FOOTBALL_FIELD_HALF_WIDTH - 0.4);
+    p.runner.root.position.z = THREE.MathUtils.clamp(p.runner.root.position.z, -FOOTBALL_FIELD_HALF_LENGTH + 0.4, FOOTBALL_FIELD_HALF_LENGTH - 0.4);
+  }
+}
+
+function getFootballKickoffTarget(game, player) {
+  const kickoffTeam = game.kickoffTeam || 0;
+  if (kickoffTeam === 0) {
+    return {
+      x: player.home.x,
+      z: player.home.z,
+      yaw: player.homeYaw ?? (player.team === 1 ? 0 : Math.PI)
+    };
+  }
+
+  const ownHalfZLimit = player.team === 1 ? -0.28 : 0.28;
+  let x = player.home.x;
+  let z = player.home.z;
+  const yaw = player.homeYaw ?? (player.team === 1 ? 0 : Math.PI);
+
+  if (player.team === kickoffTeam) {
+    const attackers = game.players
+      .filter((p) => p.team === kickoffTeam && p.role === "attacker")
+      .sort((a, b) => Math.abs(a.home.x) - Math.abs(b.home.x));
+    const attackerIndex = attackers.indexOf(player);
+    if (attackerIndex === 0) {
+      x = 0;
+      z = -player.team * 0.28;
+    } else if (attackerIndex === 1) {
+      x = (player.home.x === 0 ? 1 : Math.sign(player.home.x)) * 0.9;
+      z = -player.team * 1.05;
+    } else {
+      x = player.home.x * 0.94;
+      z = player.team === 1 ? Math.min(player.home.z, ownHalfZLimit) : Math.max(player.home.z, ownHalfZLimit);
+    }
+  } else {
+    x = player.home.x * 0.96;
+    z = player.team === 1 ? Math.min(player.home.z, ownHalfZLimit) : Math.max(player.home.z, ownHalfZLimit);
+    const centerDist = Math.hypot(x, z);
+    const keepoutRadius = FOOTBALL_CENTER_CIRCLE_RADIUS + 0.45;
+    if (centerDist < keepoutRadius) {
+      const nx = x === 0 && z === 0 ? (player.home.x === 0 ? 1 : Math.sign(player.home.x)) : x / Math.max(0.001, centerDist);
+      const nz = x === 0 && z === 0 ? -player.team : z / Math.max(0.001, centerDist);
+      x = nx * keepoutRadius;
+      z = nz * keepoutRadius;
+      z = player.team === 1 ? Math.min(z, ownHalfZLimit) : Math.max(z, ownHalfZLimit);
+    }
+  }
+
+  return { x, z, yaw };
+}
+
 function resetFootballKickoff(game) {
   resetFootballBall(game);
   game.attackingTeam = 0;
@@ -2289,9 +2578,10 @@ function resetFootballKickoff(game) {
   }
   for (let i = 0; i < game.players.length; i += 1) {
     const p = game.players[i];
-    p.runner.root.position.x = p.home.x;
-    p.runner.root.position.z = p.home.z;
-    p.runner.root.rotation.y = p.homeYaw ?? (p.team === 1 ? 0 : Math.PI);
+    const kickoffTarget = getFootballKickoffTarget(game, p);
+    p.runner.root.position.x = kickoffTarget.x;
+    p.runner.root.position.z = kickoffTarget.z;
+    p.runner.root.rotation.y = kickoffTarget.yaw;
     p.vx = 0;
     p.vz = 0;
     p.kickBlend = 0;
@@ -2310,6 +2600,7 @@ function resetFootballKickoff(game) {
     p.roamX = p.role === "attacker" ? (Math.random() - 0.5) * 1.9 : (Math.random() - 0.5) * 1.1;
     p.roamZ = p.role === "attacker" ? (Math.random() - 0.5) * 1.4 : (Math.random() - 0.5) * 0.8;
   }
+  game.kickoffTeam = 0;
   setGoalOverlayState(false);
   updateScoreboard(game);
 }
@@ -2332,8 +2623,10 @@ function startGoalCelebration(game, scoringTeam, scorer) {
     FOOTBALL_FIELD_HALF_LENGTH - 1.25
   );
   game.attackingTeam = 0;
+  game.kickoffTeam = -scoringTeam;
   game.celebration = {
     active: true,
+    phase: "celebrate",
     timer: GOAL_CELEBRATION_DURATION,
     duration: GOAL_CELEBRATION_DURATION,
     team: scoringTeam,
@@ -2357,7 +2650,7 @@ function startGoalCelebration(game, scoringTeam, scorer) {
   }
   if (playerStatus) {
     playerStatus.className = "scoreboard-player";
-    playerStatus.textContent = scorerPlayer ? `Scorer: ${scorerPlayer.shirtNumber} - ${scorerPlayer.displayName} (${formatGoalOrdinal(scorerPlayer.goalsScored ?? 1)} goal)` : "Scorer: unknown";
+    playerStatus.textContent = scorerPlayer ? `Scorer: ${getFootballPlayerLabel(scorerPlayer)} | ${formatGoalOrdinal(scorerPlayer.goalsScored ?? 1)} goal` : "Scorer: unknown";
     playerStatus.classList.add(scoringTeam === 1 ? "scoreboard-player-red" : "scoreboard-player-blue");
   }
 }
@@ -2366,11 +2659,13 @@ function updateGoalCelebration(game, dt) {
   const celebration = game.celebration;
   if (!celebration?.active) return false;
 
-  celebration.timer = Math.max(0, celebration.timer - dt);
-  celebration.pulse += dt * 8.2;
+  if (celebration.phase === "celebrate") {
+    celebration.timer = Math.max(0, celebration.timer - dt);
+    celebration.pulse += dt * 8.2;
+  }
   const elapsed = celebration.duration - celebration.timer;
   const overlayRemaining = GOAL_OVERLAY_DURATION - elapsed;
-  if (overlayRemaining > 0) {
+  if (celebration.phase === "celebrate" && overlayRemaining > 0) {
     const intro = THREE.MathUtils.clamp(elapsed / 0.9, 0, 1);
     const outro = THREE.MathUtils.clamp(overlayRemaining / 0.7, 0, 1);
     goalOverlay.style.display = "block";
@@ -2381,7 +2676,11 @@ function updateGoalCelebration(game, dt) {
     goalOverlay.style.display = "none";
   }
 
-  game.ball.position.set(celebration.ballX, FOOTBALL_BALL_RADIUS, celebration.ballZ);
+  if (celebration.phase === "reset") {
+    game.ball.position.set(0, FOOTBALL_BALL_RADIUS, 0);
+  } else {
+    game.ball.position.set(celebration.ballX, FOOTBALL_BALL_RADIUS, celebration.ballZ);
+  }
   game.ballVel.set(0, 0, 0);
 
   const scorer = celebration.scorer;
@@ -2399,7 +2698,18 @@ function updateGoalCelebration(game, dt) {
     let lookZ = celebration.spotZ;
     let pose = { kickAmount: p.kickBlend ?? 0, kickSide: p.kickSide ?? 1, sprintAmount: p.team === celebration.team ? 0.58 : 0.18 };
 
-    if (p === scorer) {
+    if (celebration.phase === "reset") {
+      const kickoffTarget = getFootballKickoffTarget(game, p);
+      targetX = kickoffTarget.x;
+      targetZ = kickoffTarget.z;
+      moveTopSpeed = p.role === "keeper" ? 1.18 : 1.56;
+      lookX = kickoffTarget.x;
+      lookZ = kickoffTarget.z + (p.team === 1 ? 2 : -2);
+      pose = {
+        ...pose,
+        sprintAmount: 0.24
+      };
+    } else if (p === scorer) {
       const sway = Math.sin(celebration.pulse * 0.48 + celebration.waveSeed) * 0.34;
       targetX = THREE.MathUtils.lerp(p.runner.root.position.x, celebration.spotX, runPhase < 1 ? 0.18 : 0.1);
       targetZ = THREE.MathUtils.lerp(celebration.spotZ + sway, celebration.spotZ, runPhase < 1 ? 0.18 : 0.06);
@@ -2431,18 +2741,15 @@ function updateGoalCelebration(game, dt) {
       targetX = THREE.MathUtils.lerp(celebration.inwardX ?? targetX, targetX, crowdPhase);
       const mateDist = Math.hypot(targetX - p.runner.root.position.x, targetZ - p.runner.root.position.z);
       moveTopSpeed = p.role === "keeper" ? 1.9 : 2.15;
-      if (mateDist < 0.95 && crowdPhase > 0.6) {
-        jumpY = Math.max(0, Math.sin(celebration.pulse + mateIndex * 0.72 + celebration.waveSeed)) * (0.24 + (mateIndex % 2) * 0.06);
-      }
       lookX = celebration.spotX - scoringSide * 0.35;
       lookZ = celebration.spotZ;
       pose = {
         ...pose,
         type: "celebration",
-        amount: crowdPhase > 0.68 && mateDist < 1.08 ? 0.62 : 0.2,
+        amount: crowdPhase > 0.56 && mateDist < 1.08 ? 0.56 : 0.18,
         side: mateIndex % 2 === 0 ? -scoringSide : scoringSide,
-        bounce: THREE.MathUtils.clamp(jumpY / 0.32, 0, 1),
-        sprintAmount: mateDist > 1.2 ? 0.88 : 0.3
+        bounce: 0,
+        sprintAmount: mateDist > 1.2 ? 0.82 : 0.12
       };
     } else {
       const retreatMix = THREE.MathUtils.clamp(elapsed / 4.2, 0, 1);
@@ -2482,6 +2789,43 @@ function updateGoalCelebration(game, dt) {
     animateRunner(p.runner, moveSpeed, p.cycle, jumpY, pose);
   }
 
+  resolveFootballPlayerSpacing(game.players, dt, celebration.phase === "reset" ? 2.2 : 1.7);
+
+  if (celebration.phase === "celebrate" && celebration.timer <= 0.001) {
+    celebration.phase = "reset";
+    if (attackStatus) {
+      attackStatus.className = "scoreboard-attack";
+      attackStatus.textContent = "RESETTING SHAPE";
+    }
+    if (playerStatus) {
+      playerStatus.className = "scoreboard-player";
+      playerStatus.textContent = "Kickoff: players returning";
+    }
+  }
+
+  if (celebration.phase === "reset") {
+    let allReady = true;
+    for (let i = 0; i < game.players.length; i += 1) {
+      const p = game.players[i];
+      const kickoffTarget = getFootballKickoffTarget(game, p);
+      const distHome = Math.hypot(p.runner.root.position.x - kickoffTarget.x, p.runner.root.position.z - kickoffTarget.z);
+      if (distHome > 0.28 || Math.hypot(p.vx, p.vz) > 0.16) {
+        allReady = false;
+        break;
+      }
+    }
+    if (allReady) {
+      resetFootballKickoff(game);
+    }
+  }
+
+  if (celebration.phase === "celebrate" && celebration.timer <= 0.001) {
+    return true;
+  }
+  if (celebration.phase === "reset") {
+    return true;
+  }
+
   if (celebration.timer <= 0.001) {
     resetFootballKickoff(game);
   }
@@ -2498,10 +2842,10 @@ function registerBallTouch(game, team, player = null) {
   game.lastTouchPlayer = player;
 }
 
-function triggerFootballKickPose(player, ball, amount = 1) {
+function triggerFootballKickPose(player, ball, amount = 1, targetX = null) {
   if (!player?.runner || !ball) return;
-  const localBall = player.runner.root.worldToLocal(ball.position.clone());
-  player.kickSide = localBall.x >= 0 ? 1 : -1;
+  const footedness = getFootballFootedness(player, ball, targetX);
+  player.kickSide = footedness.kickSide;
   player.kickBlend = Math.max(player.kickBlend ?? 0, THREE.MathUtils.clamp(amount, 0.45, 1.15));
 }
 
@@ -2530,6 +2874,7 @@ function findBestPassTarget(carrier, teammates, opponents) {
   let bestFreeForwardDistance = 0;
   const ownGoalDepth = -carrier.runner.root.position.z * carrier.team;
   const escapeBias = THREE.MathUtils.clamp((ownGoalDepth - (FOOTBALL_FIELD_HALF_LENGTH - 7.2)) / 3.4, 0, 1.55);
+  const ownThirdTrapBias = THREE.MathUtils.clamp((ownGoalDepth - (FOOTBALL_FIELD_HALF_LENGTH - 7.9)) / 2.8, 0, 1.5);
 
   for (let i = 0; i < teammates.length; i += 1) {
     const mate = teammates[i];
@@ -2555,6 +2900,8 @@ function findBestPassTarget(carrier, teammates, opponents) {
     let nearestOpponent = 99;
     let laneTraffic = 0;
     let interceptRisk = 0;
+    let frontBlockerRisk = 0;
+    let directLaneBlock = false;
     for (let j = 0; j < opponents.length; j += 1) {
       const opp = opponents[j];
       const odx = targetX - opp.runner.root.position.x;
@@ -2569,7 +2916,15 @@ function findBestPassTarget(carrier, teammates, opponents) {
       const laneDist = Math.hypot(opp.runner.root.position.x - projX, opp.runner.root.position.z - projZ);
       if (laneDist < 1.15) laneTraffic += (1.15 - laneDist) * (1.18 - along * 0.4);
       if (along > 0.12 && along < 0.92 && laneDist < 0.82) interceptRisk += (0.82 - laneDist) * 1.6;
+      if (forward > 0.2 && along > 0.18 && along < 0.88 && laneDist < 0.58) {
+        frontBlockerRisk += (0.58 - laneDist) * (1.05 - Math.abs(along - 0.52) * 0.8) * 2.4;
+      }
+      if (forward > 0.35 && along > 0.22 && along < 0.82 && laneDist < 0.34) {
+        directLaneBlock = true;
+      }
     }
+
+    if (directLaneBlock && forward > 0.45) continue;
 
     const openness = THREE.MathUtils.clamp((nearestOpponent - 0.9) / 3.3, 0, 1.35);
     const longPassBias = THREE.MathUtils.clamp((dist - 2.4) / 5.8, 0, 1.55);
@@ -2577,6 +2932,8 @@ function findBestPassTarget(carrier, teammates, opponents) {
     const throughBias = THREE.MathUtils.clamp(forward / 5.8, -0.2, 1.4);
     const roleBias = mate.role === "attacker" ? 0.9 : mate.role === "defender" ? 0.38 : 0;
     const profileBias = mate.attackerProfile === "runner" ? 0.34 : mate.attackerProfile === "poacher" ? 0.22 : mate.attackerProfile === "playmaker" ? -0.08 : 0;
+    const carrierPlaymakerBias = carrier.attackerProfile === "playmaker" ? 1 : 0;
+    const carrierRunnerBias = carrier.attackerProfile === "runner" ? 1 : 0;
     const counterBias = mate.counterRunBoost ?? 0;
     const laneRoleBias = mate.attackLane === "farPost" ? 1.12 : mate.attackLane === "poach" ? 1.04 : mate.attackLane === "boxEdge" ? 0.76 : mate.attackLane === "overlap" ? 0.92 : mate.attackLane === "underlap" ? 0.72 : mate.attackLane === "link" ? 0.34 : mate.attackLane === "press" ? 0.18 : 0;
     const overlapBias = mate.attackLane === "overlap" ? switchBias * 1.2 + openness * 0.34 : 0;
@@ -2584,6 +2941,9 @@ function findBestPassTarget(carrier, teammates, opponents) {
     const poachBias = mate.attackLane === "poach" ? throughBias * 0.4 + openness * 0.28 : 0;
     const farPostBias = mate.attackLane === "farPost" ? switchBias * 0.52 + openness * 0.36 : 0;
     const edgeBias = mate.attackLane === "boxEdge" ? openness * 0.28 + longPassBias * 0.22 : 0;
+    const switchPlayBias = carrierPlaymakerBias * switchBias * (mate.attackLane === "farPost" || mate.attackLane === "overlap" ? 1.15 : 0.72);
+    const diagonalSplitBias = carrierPlaymakerBias * Math.max(0, throughBias) * Math.min(1.2, Math.abs(dx) / 2.8) * (mate.attackerProfile === "runner" ? 1.2 : mate.attackLane === "underlap" ? 1 : 0.45);
+    const runnerFeedBias = carrierRunnerBias * Math.max(0, throughBias) * (mate.attackerProfile === "runner" ? 0.42 : 0.16);
     const attackDepthBias = finalThirdBias * THREE.MathUtils.clamp((targetAttackDepth - attackDepth + 0.45) / 4.2, -0.25, 1.25);
     const goalHangBias = finalThirdBias * THREE.MathUtils.clamp((targetAttackDepth - (FOOTBALL_FIELD_HALF_LENGTH - 5.6)) / 3.4, 0, 1.15);
     const progressiveBias = THREE.MathUtils.clamp((goalGain - 0.15) / 3.2, -0.2, 1.45);
@@ -2602,7 +2962,18 @@ function findBestPassTarget(carrier, teammates, opponents) {
     const nonProgressiveAttackerPenalty = mate.role === "attacker" ? finalThirdBias * THREE.MathUtils.clamp((0.45 - goalGain) / 1.6, 0, 1.3) : 0;
     const escapeForwardBias = escapeBias * THREE.MathUtils.clamp(forward / 4.9, -0.15, 1.35);
     const escapeLongBias = escapeBias * THREE.MathUtils.clamp((dist - 3.5) / 4.6, 0, 1.25);
-    const score = openness * 2.7 + longPassBias * 2.15 + throughBias * 2.25 + switchBias * 0.75 + roleBias + profileBias + counterBias + laneRoleBias + overlapBias + underlapBias + poachBias + farPostBias + edgeBias + attackDepthBias * 1.95 + goalHangBias * 1.55 + attackerGoalBias * 1.9 + breakRunBias * 1.8 + runLaneReward * 1.25 + escapeForwardBias * 2.45 + escapeLongBias * 1.85 - recyclePenalty * 2.2 - backwardPenalty * 2.6 - nonProgressiveAttackerPenalty * 1.8 - laneTraffic * (1.65 + escapeBias * 0.12) - interceptRisk * (1.4 + escapeBias * 0.08);
+    const deepRecyclePenalty = ownThirdTrapBias * THREE.MathUtils.clamp((1.05 - forward) / 1.45, 0, 1.3) * THREE.MathUtils.clamp((6.2 - dist) / 3.8, 0, 1.15);
+    const deepDefenderLoopPenalty = ownThirdTrapBias
+      * (carrier.role === "defender" && mate.role === "defender" ? 1 : 0)
+      * THREE.MathUtils.clamp((5.8 - dist) / 3.2, 0, 1.2)
+      * THREE.MathUtils.clamp((0.95 - forward) / 1.35, 0, 1.2);
+    const ownThirdOutletBias = ownThirdTrapBias
+      * (mate.role === "attacker" ? 1.45 : mate.role === "defender" ? 0.18 : 0.45)
+      * THREE.MathUtils.clamp((goalGain + 0.2) / 3.6, -0.1, 1.25);
+    const ownThirdSwitchBias = ownThirdTrapBias * switchBias * (mate.role === "attacker" ? 0.62 : 0.28);
+    const score = openness * 2.7 + longPassBias * 2.15 + throughBias * 2.25 + switchBias * 0.75 + roleBias + profileBias + counterBias + laneRoleBias + overlapBias + underlapBias + poachBias + farPostBias + edgeBias + switchPlayBias + diagonalSplitBias + runnerFeedBias + attackDepthBias * 1.95 + goalHangBias * 1.55 + attackerGoalBias * 1.9 + breakRunBias * 1.8 + runLaneReward * 1.25 + escapeForwardBias * 2.45 + escapeLongBias * 1.85 + ownThirdOutletBias * 2.35 + ownThirdSwitchBias
+      - recyclePenalty * 2.2 - backwardPenalty * 2.6 - nonProgressiveAttackerPenalty * 1.8 - deepRecyclePenalty * 2.55 - deepDefenderLoopPenalty * 3.1 - laneTraffic * (1.65 + escapeBias * 0.12) - interceptRisk * (1.4 + escapeBias * 0.08) - frontBlockerRisk * 2.6
+      + (carrier.passVision ?? 0) * (progressiveBias * 0.9 + openness * 0.55 + Math.max(0, goalGain) * 0.2);
     if (score > bestScore) {
       bestScore = score;
       bestTarget = mate;
@@ -2627,7 +2998,9 @@ function findBestPassTarget(carrier, teammates, opponents) {
       && openness > 0.2 - runLaneBias * 0.08
       && nearestOpponent > 1.15 - runLaneBias * 0.14
       && laneTraffic < 0.45 + runLaneBias * 0.18
-      && interceptRisk < 0.35 + runLaneBias * 0.16;
+      && interceptRisk < 0.35 + runLaneBias * 0.16
+      && frontBlockerRisk < 0.18
+      && !directLaneBlock;
     if (freeForwardAttacker) {
       const freeForwardScore = score + progressiveBias * 1.8 + directGoalBias * 1.5 + openness * 0.9 + runLaneBias * 1.8;
       if (freeForwardScore > bestFreeForwardScore) {
@@ -2644,7 +3017,7 @@ function findBestPassTarget(carrier, teammates, opponents) {
       || bestTarget === bestFreeForwardAttacker
       || bestTarget.role !== "attacker"
       || bestGoalGain < 0.55
-      || bestFreeForwardScore > bestScore - 0.8
+      || bestFreeForwardScore > bestScore - (0.55 - FOOTBALL_BEHAVIOR.progressiveChoiceBias)
     );
   const useProgressiveTarget = !useFreeForwardAttacker && bestProgressiveTarget
     && (
@@ -2652,7 +3025,7 @@ function findBestPassTarget(carrier, teammates, opponents) {
       || bestTarget.role !== "attacker"
       || bestGoalGain < 0.3
       || bestProgressiveGoalGain > bestGoalGain + 0.25
-      || bestProgressiveScore > bestScore - 0.45
+      || bestProgressiveScore > bestScore - (0.2 + FOOTBALL_BEHAVIOR.progressiveChoiceBias)
     );
   const selectedTarget = useFreeForwardAttacker ? bestFreeForwardAttacker : (useProgressiveTarget ? bestProgressiveTarget : bestTarget);
   const selectedDistance = useFreeForwardAttacker ? bestFreeForwardDistance : (useProgressiveTarget ? bestProgressiveDistance : bestDistance);
@@ -3215,7 +3588,7 @@ function updateFootballGame(game, dt) {
 
   if (updateGoalCelebration(game, dt)) return;
 
-  game.ballVel.multiplyScalar(Math.pow(0.985, dt * 60));
+  game.ballVel.multiplyScalar(Math.pow(0.9915, dt * 60));
   game.ball.position.x += game.ballVel.x * dt;
   game.ball.position.z += game.ballVel.z * dt;
 
@@ -3475,6 +3848,9 @@ function updateFootballGame(game, dt) {
     const stallUrgency = THREE.MathUtils.clamp((game.stallTimer - 0.35) / 1.45, 0, 1);
     const teamIsStalling = game.stallTeam === p.team && stallUrgency > 0;
     const trapPress = game.stallTeam === -p.team && stallUrgency > 0.32;
+    const shapeLiftBias = controllingTeam === p.team && teamIsStalling
+      ? THREE.MathUtils.clamp((game.stallTimer - 0.6) / 1.85, 0, 1.35)
+      : 0;
     const supportAttack = p.role === "defender" && controllingTeam === p.team && (teamIsStalling || (Math.abs(p.home.x) > 0.5 ? ballProgress > -2.4 || isCounterRunner : ballProgress > 0.7 || p === teamLeader || isCounterRunner));
     const recoverDefence = p.role === "attacker" && controllingTeam !== p.team && ownHalfBias > 0.42 && !trapPress;
     const tacticalRole = p.role === "keeper" ? "keeper" : supportAttack ? "supportAttack" : recoverDefence ? "recoverDefence" : p.role;
@@ -3533,14 +3909,14 @@ function updateFootballGame(game, dt) {
         const attackFreedom = nearestOpponentToPlayer > 1.55 && nearestFrontMarker > 1.1 && runLaneTraffic < 1.05;
         if (p.goalRunTimer <= 0 && p.goalRunCooldown <= 0 && runWindow && attackFreedom) {
           const runSide = laneSign === 0 ? Math.sign((p.runner.root.position.x - carrierX) || p.laneBias || 1) : laneSign;
-          const startWide = attackerProfile === "runner" ? 1.7 : attackerProfile === "poacher" ? 1.15 : 0.9;
+          const startWide = attackerProfile === "runner" ? 2.05 : attackerProfile === "poacher" ? 1.15 : 0.82;
           p.goalRunTargetX = THREE.MathUtils.clamp(
-            THREE.MathUtils.lerp(p.runner.root.position.x, runSide * startWide + carrierX * 0.12, attackerProfile === "playmaker" ? 0.4 : 0.6),
+            THREE.MathUtils.lerp(p.runner.root.position.x, runSide * startWide + carrierX * 0.12, attackerProfile === "playmaker" ? 0.32 : attackerProfile === "runner" ? 0.72 : 0.6),
             -FOOTBALL_FIELD_HALF_WIDTH + 0.85,
             FOOTBALL_FIELD_HALF_WIDTH - 0.85
           );
           p.goalRunTargetZ = THREE.MathUtils.clamp(
-            attackGoalZ - p.team * ((attackerProfile === "poacher" ? 1.05 : attackerProfile === "runner" ? 1.55 : 1.85) + Math.random() * 0.8),
+            attackGoalZ - p.team * ((attackerProfile === "poacher" ? 1.05 : attackerProfile === "runner" ? 1.35 : 2.05) + Math.random() * 0.8),
             -FOOTBALL_FIELD_HALF_LENGTH + 0.85,
             FOOTBALL_FIELD_HALF_LENGTH - 0.5
           );
@@ -3583,7 +3959,36 @@ function updateFootballGame(game, dt) {
       const isCentralDefender = Math.abs(p.home.x) < 0.5;
       const depthOffset = isCentralDefender ? 2.45 : 3.15;
       const baseLineZ = defendGoalZ + p.team * depthOffset;
-      if (p === teamLeader && ownHalfBias > 0.22) {
+      const ballHolderPressure = game.ballHolder && game.ballHolder.team !== p.team
+        ? Math.hypot(game.ballHolder.runner.root.position.x - p.runner.root.position.x, game.ballHolder.runner.root.position.z - p.runner.root.position.z)
+        : 99;
+      const carrierAdvance = game.ballHolder && game.ballHolder.team !== p.team
+        ? (game.ballHolder.runner.root.position.z * p.team)
+        : (game.ball.position.z * p.team);
+      const canStepOut = controllingTeam !== p.team
+        && ownHalfBias > 0.08
+        && (
+          p === teamLeader
+          || ballHolderPressure < (isCentralDefender ? 3.8 : 3.2) * FOOTBALL_BEHAVIOR.defenderStepRangeScale
+          || ballDist < (isCentralDefender ? 3.4 : 2.9) * FOOTBALL_BEHAVIOR.defenderStepRangeScale
+          || ((p.tackleBias ?? 0) > 0.08 && carrierAdvance > -1.2)
+        );
+      if (canStepOut) {
+        const carrier = game.ballHolder && game.ballHolder.team !== p.team ? game.ballHolder : null;
+        const coverPassX = carrier
+          ? THREE.MathUtils.lerp(game.ball.position.x, carrier.runner.root.position.x, 0.42)
+          : game.ball.position.x;
+        const coverPassZ = carrier
+          ? THREE.MathUtils.lerp(game.ball.position.z, carrier.runner.root.position.z, 0.42)
+          : game.ball.position.z;
+        const challengeDepth = (isCentralDefender ? 0.12 : 0.06) * FOOTBALL_BEHAVIOR.defenderStepDepthScale;
+        const stepAggression = (isCentralDefender ? 0.34 : 0.28) * FOOTBALL_BEHAVIOR.defenderCoverLerpScale;
+        targetX = game.ball.position.x + p.laneBias * (isCentralDefender ? 0.03 : 0.07);
+        targetX = THREE.MathUtils.lerp(targetX, coverPassX, carrier ? (0.42 + (p.tackleBias ?? 0) * 0.75) * FOOTBALL_BEHAVIOR.defenderCoverLerpScale : 0.12 * FOOTBALL_BEHAVIOR.defenderCoverLerpScale);
+        targetZ = game.ball.position.z - p.team * challengeDepth;
+        targetZ = THREE.MathUtils.lerp(targetZ, coverPassZ - p.team * 0.08, carrier ? stepAggression + (p.tackleBias ?? 0) * 0.35 * FOOTBALL_BEHAVIOR.defenderCoverLerpScale : 0.16 * FOOTBALL_BEHAVIOR.defenderCoverLerpScale);
+        p.attackLane = carrier ? "press" : "step";
+      } else if (p === teamLeader && ownHalfBias > 0.22) {
         targetX = game.ball.position.x + p.laneBias * (isCentralDefender ? 0.05 : 0.1);
         targetZ = game.ball.position.z - p.team * (isCentralDefender ? 0.48 : 0.36);
       } else {
@@ -3662,6 +4067,7 @@ function updateFootballGame(game, dt) {
         } else {
           const isCentralAttacker = Math.abs(p.home.x) < 0.5;
           const finalThirdBias = THREE.MathUtils.clamp((ballProgress + 0.9) / 7.2, 0, 1);
+          const deepBuildBias = THREE.MathUtils.clamp(((-game.ball.position.z * p.team) - (FOOTBALL_FIELD_HALF_LENGTH - 7.4)) / 2.9, 0, 1.25);
           const farPostRunner = !isCentralAttacker && (ballSide === 0 ? attackIndex === attackers.length - 1 : laneSign === -ballSide);
           const hungryAttacker = baseShotHunger > 1.08;
           const supportRole = attackerProfile === "poacher"
@@ -3682,7 +4088,7 @@ function updateFootballGame(game, dt) {
             ? laneSign * 1.7
             : -ballSide * Math.min(FOOTBALL_GOAL_WIDTH * 0.7 + 0.55, 2.2);
           const edgeChannelX = laneSign * (ballSide !== 0 && laneSign === ballSide ? FOOTBALL_FIELD_HALF_WIDTH * 0.24 : FOOTBALL_FIELD_HALF_WIDTH * 0.18);
-          const profileDriftX = attackerProfile === "playmaker" ? -laneSign * 0.42 : attackerProfile === "runner" ? laneSign * 0.18 : 0;
+          const profileDriftX = attackerProfile === "playmaker" ? -laneSign * 0.56 : attackerProfile === "runner" ? laneSign * 0.28 : 0;
           const boxLaneX = supportRole === "poach"
             ? THREE.MathUtils.clamp(game.ball.position.x * 0.14 + p.roamX * 0.18, -1.6, 1.6)
             : supportRole === "farPost"
@@ -3699,8 +4105,8 @@ function updateFootballGame(game, dt) {
               ? 1.05 + finalThirdBias * 0.95
               : 3.05 + finalThirdBias * (0.72 - Math.min(0.16, (baseShotHunger - 0.8) * 0.18));
           const receiveZ = game.ball.position.z + p.team * (supportRole === "boxEdge"
-            ? (attackerProfile === "playmaker" ? 1.35 : 1.85) + p.pressBias * 0.16
-            : (attackerProfile === "runner" ? 2.7 : 2.3) + attackIndex * 0.22 + p.pressBias * 0.22);
+            ? (attackerProfile === "playmaker" ? 1.15 : 1.85) + p.pressBias * 0.16
+            : (attackerProfile === "runner" ? 2.95 : 2.3) + attackIndex * 0.22 + p.pressBias * 0.22);
           const goalHangZ = attackGoalZ - p.team * poachDepth;
           const supportZ = supportRole === "boxEdge"
             ? THREE.MathUtils.lerp(receiveZ, attackGoalZ - p.team * (3.45 - finalThirdBias * 0.45), 0.46 + finalThirdBias * 0.16)
@@ -3712,6 +4118,24 @@ function updateFootballGame(game, dt) {
             const runBlend = THREE.MathUtils.clamp(0.56 + p.goalRunTimer * 0.22, 0.56, 0.94);
             targetX = THREE.MathUtils.lerp(targetX, p.goalRunTargetX ?? targetX, runBlend * 0.9);
             targetZ = THREE.MathUtils.lerp(targetZ, p.goalRunTargetZ ?? targetZ, runBlend);
+          }
+          if (deepBuildBias > 0.01) {
+            const escapeLaneSign = laneSign === 0 ? Math.sign((p.runner.root.position.x - game.ball.position.x) || p.laneBias || 1) : laneSign;
+            const outletX = THREE.MathUtils.clamp(
+              THREE.MathUtils.lerp(targetX, escapeLaneSign * (isCentralAttacker ? 1.15 : FOOTBALL_FIELD_HALF_WIDTH - 1.25), 0.28 + deepBuildBias * 0.14),
+              -FOOTBALL_FIELD_HALF_WIDTH + 0.95,
+              FOOTBALL_FIELD_HALF_WIDTH - 0.95
+            );
+            const outletZ = THREE.MathUtils.clamp(
+              game.ball.position.z + p.team * (4.7 + attackIndex * 0.38 + (attackerProfile === "runner" ? 1.1 : 0.45) + deepBuildBias * 1.25),
+              -FOOTBALL_FIELD_HALF_LENGTH + 1.15,
+              FOOTBALL_FIELD_HALF_LENGTH - 0.7
+            );
+            targetX = THREE.MathUtils.lerp(targetX, outletX, 0.36 + deepBuildBias * 0.16);
+            targetZ = Math.max(targetZ * p.team, outletZ * p.team) * p.team;
+            if (p.goalRunTimer <= 0.05) {
+              p.attackLane = attackerProfile === "playmaker" ? "link" : "breakRun";
+            }
           }
         }
       } else if ((p === teamLeader && ballDist < (trapPress ? 5.2 : 3.35)) || (trapPress && p.role === "attacker" && ballDist < 4.1)) {
@@ -3741,11 +4165,28 @@ function updateFootballGame(game, dt) {
       targetZ = THREE.MathUtils.lerp(targetZ, receiveZ, 0.9);
     }
 
+    if (shapeLiftBias > 0.01 && p.role !== "keeper") {
+      const roleLift = tacticalRole === "attacker"
+        ? 2.2
+        : tacticalRole === "supportAttack"
+          ? 1.65
+          : p.role === "defender"
+            ? 1.05
+            : 1.3;
+      const laneStretch = p.role === "attacker" ? Math.abs(p.home.x) * 0.08 : 0;
+      const liftedTargetZ = THREE.MathUtils.clamp(
+        targetZ + p.team * (roleLift + laneStretch) * shapeLiftBias,
+        -FOOTBALL_FIELD_HALF_LENGTH + 0.95,
+        FOOTBALL_FIELD_HALF_LENGTH - 0.65
+      );
+      targetZ = Math.max(targetZ * p.team, liftedTargetZ * p.team) * p.team;
+    }
+
 
     const dirX = targetX - p.runner.root.position.x;
     const dirZ = targetZ - p.runner.root.position.z;
     const dirLen = Math.max(0.001, Math.hypot(dirX, dirZ));
-    const baseSpeed = p.role === "keeper" ? 1.04 : isCounterRunner ? 1.54 : tacticalRole === "supportAttack" ? 1.34 : tacticalRole === "recoverDefence" ? 1.34 : p.role === "defender" ? 1.26 : 1.42;
+    const baseSpeed = p.role === "keeper" ? 1.1 : isCounterRunner ? 1.72 : tacticalRole === "supportAttack" ? 1.48 : tacticalRole === "recoverDefence" ? 1.46 : p.role === "defender" ? 1.38 + FOOTBALL_BEHAVIOR.defenderSpeedBonus : 1.56;
     const burst = isCounterRunner ? 1.08 : (tacticalRole === "attacker" || tacticalRole === "supportAttack") && ballDist < 2.4 ? 1 : ballDist < 2.5 ? 0.72 : 0.2;
     const tempoPulse = 1
       + Math.sin(game.phase * (1.2 + (p.tempoRate ?? 1) * 0.45) + (p.tempoPhase ?? 0)) * 0.09 * (p.tempoJitter ?? 1)
@@ -3861,23 +4302,44 @@ function updateFootballGame(game, dt) {
       const trappedNearOwnGoal = ownGoalDepth > FOOTBALL_FIELD_HALF_LENGTH - 6.1;
       const finalThirdUrgency = THREE.MathUtils.clamp((6.8 - goalDistance) / 4.6, 0, 1.35);
       const touchChainPressure = game.lastTouchTeam === p.team ? THREE.MathUtils.clamp((game.sameTeamTouchCount - 2) / 3.2, 0, 1.35) : 0;
+      const ownThirdLoopPressure = trappedNearOwnGoal && game.lastTouchTeam === p.team
+        ? THREE.MathUtils.clamp((game.sameTeamTouchCount - 2) / 2.1, 0, 1.7)
+        : 0;
       const playmakerBias = attackerProfile === "playmaker" ? 0.24 : attackerProfile === "runner" ? -0.08 : attackerProfile === "poacher" ? -0.16 : 0;
-      const shotHungerBias = isAttackMinded ? THREE.MathUtils.clamp(baseShotHunger + finalThirdUrgency * 0.22 + touchChainPressure * 0.12 + (isCounterRunner ? 0.16 : 0) - playmakerBias, 0.28, 1.95) : THREE.MathUtils.clamp(baseShotHunger, 0.18, 1.2);
+      const dribbleTraitBias = p.trait === "dribble" ? THREE.MathUtils.clamp((1.7 - nearestPressure) * 0.2, 0, 0.18) : 0;
+      const shotHungerBias = isAttackMinded ? THREE.MathUtils.clamp(baseShotHunger + finalThirdUrgency * 0.22 + touchChainPressure * 0.12 + (isCounterRunner ? 0.16 : 0) - playmakerBias - dribbleTraitBias, 0.28, 1.95) : THREE.MathUtils.clamp(baseShotHunger, 0.18, 1.2);
+      const longShotTraitBias = p.trait === "finish" ? 0.18 : p.trait === "dribble" ? -0.06 : 0;
+      const longShotProfileBias = attackerProfile === "poacher" ? 0.12 : attackerProfile === "runner" ? 0.05 : attackerProfile === "playmaker" ? -0.14 : 0;
+      const longShotBias = longShotTraitBias + longShotProfileBias + (p.shotPowerBias ?? 0) * 0.35 + (p.shotAccuracyBias ?? 0) * 0.22;
       const selfishFinisher = shotHungerBias > 1.08;
       const forceDirectPlay = isAttackMinded && (finalThirdUrgency > 0.52 || touchChainPressure > 0.45 || isCounterRunner || selfishFinisher && goalDistance < 6.4);
       const recyclePass = passOption && passOption.forward < 0.75 && passOption.dist < 5.4;
       const escapeMode = teamIsStalling || (trappedNearOwnGoal && (nearestPressure < 2.2 || game.ballVel.length() < 1.35));
       const clearanceOption = escapeMode ? findClearanceTarget(p, teammates, opponents) : null;
       const shouldClear = clearanceOption && (nearestPressure < 2.35 || game.stallTimer > 1.1 || shotLanePenalty > 0.52);
-      const baseShouldShoot = !escapeMode && (finishType !== null || (isAttackMinded && shotLanePenalty < 1.18 + finalThirdUrgency * 0.3 + shotHungerBias * 0.16 && (dodgeShotDist < 4.45 + finalThirdUrgency * 1.95 + touchChainPressure * 0.95 + shotHungerBias * 0.9 || (dodgeShotDist < 6.7 + touchChainPressure * 0.6 + shotHungerBias * 0.5 && nearestPressure < 1.08 + finalThirdUrgency * 0.38 + shotHungerBias * 0.1) || (forceDirectPlay && goalDistance < 6.05 + shotHungerBias * 0.45 && shotLanePenalty < 1.46) || (selfishFinisher && goalDistance < 4.6 && shotLanePenalty < 1.58) || (isCounterRunner && dodgeShotDist < 7.4))));
+      const longShotWindow = !escapeMode
+        && isAttackMinded
+        && finishType === null
+        && goalDistance > 6.2
+        && goalDistance < 11.6 + Math.max(0, longShotBias) * 1.3
+        && dodgeShotDist < 10.8 + Math.max(0, longShotBias) * 0.9
+        && shotLanePenalty < 0.58 + Math.max(0, longShotBias) * 0.12
+        && nearestPressure > 0.92 + Math.min(0.38, goalDistance * 0.03) - Math.max(0, longShotBias) * 0.18
+        && shotHungerBias > 0.86 - Math.max(0, longShotBias) * 0.12;
+      const baseShouldShoot = !escapeMode && (finishType !== null || longShotWindow || (isAttackMinded && shotLanePenalty < 1.18 + finalThirdUrgency * 0.3 + shotHungerBias * 0.16 && (dodgeShotDist < 4.45 + finalThirdUrgency * 1.95 + touchChainPressure * 0.95 + shotHungerBias * 0.9 || (dodgeShotDist < 6.7 + touchChainPressure * 0.6 + shotHungerBias * 0.5 && nearestPressure < 1.08 + finalThirdUrgency * 0.38 + shotHungerBias * 0.1) || (forceDirectPlay && goalDistance < 6.05 + shotHungerBias * 0.45 && shotLanePenalty < 1.46) || (selfishFinisher && goalDistance < 4.6 && shotLanePenalty < 1.58) || (isCounterRunner && dodgeShotDist < 7.4))));
       const shouldCross = !escapeMode && crossOption && isAttackMinded && wideCrossZone && (p.attackLane === "overlap" || Math.abs(game.ball.position.x) > FOOTBALL_GOAL_WIDTH * 1.15 || nearestPressure < 1.1) && (!baseShouldShoot || dodgeShotDist > 2.4);
+      const longPassWindow = Boolean(passOption && !escapeMode && !shouldCross)
+        && passOption.dist > FOOTBALL_BEHAVIOR.longPassDistMin
+        && passOption.forward > FOOTBALL_BEHAVIOR.longPassForwardMin
+        && passOption.score > FOOTBALL_BEHAVIOR.longPassScoreMin;
+      const mustBreakOwnThirdLoop = ownThirdLoopPressure > 0.28;
       const throughRunPass = Boolean(passOption && passOption.throughRun && !escapeMode && !shouldCross)
-        && (passOption.score > 4.15 || passOption.forcedForward)
+        && (passOption.score > 4.15 || passOption.forcedForward || longPassWindow)
         && (goalDistance > 3.1 || finishType === null)
         && (!baseShouldShoot || dodgeShotDist > 3.6 || nearestPressure < 1.2 || shotLanePenalty > 0.62);
       const shouldShoot = baseShouldShoot && !throughRunPass;
       const shouldPass = passOption && (
-        throughRunPass || (
+        throughRunPass || longPassWindow || (
           !shouldClear
           && (escapeMode || (
             finishType === null
@@ -3885,18 +4347,27 @@ function updateFootballGame(game, dt) {
             && (!isAttackMinded
               || passOption.progressive
               || passOption.goalGain > 0.65
-              || passOption.dist > 3.9 - Math.min(0.55, (shotHungerBias - 0.75) * 0.45)
+              || passOption.dist > FOOTBALL_BEHAVIOR.passDistanceTriggerBase - Math.min(FOOTBALL_BEHAVIOR.passDistanceTriggerVariance, (shotHungerBias - 0.75) * 0.5)
               || dodgeShotDist > 5.15 + Math.min(0.65, shotHungerBias * 0.35)
               || nearestPressure < 1.14 - Math.min(0.12, (shotHungerBias - 0.7) * 0.08)
               || passOption.forward > (forceDirectPlay ? 1.05 + shotHungerBias * 0.1 : 0.28 + Math.min(0.3, shotHungerBias * 0.08))
               || passOption.targetDepth > FOOTBALL_FIELD_HALF_LENGTH - (5.15 + shotHungerBias * 0.55)
-              || passOption.score > 4.7 + finalThirdUrgency * 0.45 + Math.max(0, shotHungerBias - 1.05) * 0.95 + (attackerProfile === "playmaker" ? 0.95 : 0)
+              || passOption.score > FOOTBALL_BEHAVIOR.passScoreBase + finalThirdUrgency * 0.4 + Math.max(0, shotHungerBias - 1.05) * 0.9 + (attackerProfile === "playmaker" ? 0.95 : 0) - Math.min(0.45, passOption.dist * FOOTBALL_BEHAVIOR.passScoreDistanceDiscount)
               || shotLanePenalty > 1.02 + shotHungerBias * 0.08)
           ))
           && !(forceDirectPlay && recyclePass && !passOption.progressive && passOption.score < 5.85 + shotHungerBias * 0.35 - (attackerProfile === "playmaker" ? 0.5 : 0))
           && !(selfishFinisher && goalDistance < 5.35 && recyclePass && passOption.forward < 1.2 && !passOption.progressive)
         )
       );
+      const forceVerticalPass = shouldPass && passOption && mustBreakOwnThirdLoop
+        && !(throughRunPass || longPassWindow)
+        && (
+          !passOption.progressive
+          || passOption.forward < 1.2
+          || passOption.player?.role !== "attacker"
+        );
+      const finalShouldPass = forceVerticalPass ? false : shouldPass;
+      const finalShouldClear = shouldClear || (mustBreakOwnThirdLoop && !throughRunPass && !longPassWindow && (!passOption || forceVerticalPass));
 
       if (shouldCross) {
         const crossTarget = crossOption.player;
@@ -3922,12 +4393,18 @@ function updateFootballGame(game, dt) {
         const crossDx = boxAimX - game.ball.position.x;
         const crossDz = boxAimZ - game.ball.position.z;
         const crossLen = Math.max(0.001, Math.hypot(crossDx, crossDz));
-        const power = 3.25 + Math.min(2.4, crossLen * 0.31);
+        const crossFoot = getFootballFootedness(p, game.ball, boxAimX);
+        const crossWeakness = crossFoot.weakFoot ? 0.88 : 1;
+        const crossCurve = (p.crossQualityBias ?? 0) + (crossWeakness < 1 ? -0.06 : 0);
+        const aimCrossDx = crossDx + Math.sign(crossDx || p.team) * crossCurve * 0.28;
+        const aimCrossLen = Math.max(0.001, Math.hypot(aimCrossDx, crossDz));
+        const power = (3.25 + Math.min(2.4, crossLen * 0.31)) * crossWeakness;
+        p.kickSide = crossFoot.kickSide;
         applyFootballKickContact(p, game.ball);
-        game.ballVel.x = (crossDx / crossLen) * power;
-        game.ballVel.z = (crossDz / crossLen) * power;
+        game.ballVel.x = (aimCrossDx / aimCrossLen) * power;
+        game.ballVel.z = (crossDz / aimCrossLen) * power;
         p.kickCooldown = 0.5 + Math.random() * 0.18;
-        triggerFootballKickPose(p, game.ball, 0.88);
+        triggerFootballKickPose(p, game.ball, 0.88, boxAimX);
         registerBallTouch(game, p.team, p);
         game.deliveryType = "cross";
         game.deliveryTeam = p.team;
@@ -3944,40 +4421,49 @@ function updateFootballGame(game, dt) {
         const finishDz = shotDz;
         const len = Math.max(0.001, Math.hypot(finishDx, finishDz));
         const shotPrecision = (dodgeShotDist < 2.6 ? 1.22 : dodgeShotDist < 4.6 ? 1.02 : 0.9) * ARCADE_SCORING_BOOST;
-        const power = (finishType === "volley"
+        const shotFoot = getFootballFootedness(p, game.ball, finishGoalX);
+        const shotWeakness = shotFoot.weakFoot ? 0.9 : 1;
+        const accuracyBias = (p.shotAccuracyBias ?? 0) - (shotWeakness < 1 ? 0.08 : 0);
+        const aimedFinishDx = finishDx + THREE.MathUtils.clamp(shotLaneNudge * 0.35 - Math.sign(finishDx || p.team) * accuracyBias * 0.24, -0.32, 0.32);
+        const aimedLen = Math.max(0.001, Math.hypot(aimedFinishDx, finishDz));
+        const longShotPowerBonus = longShotWindow ? THREE.MathUtils.clamp((goalDistance - 6) * (0.14 + Math.max(0, longShotBias) * 0.03), 0.12, 0.82) : 0;
+        const power = ((finishType === "volley"
           ? 4.95 + Math.random() * 0.3
           : finishType === "backPost"
             ? 4.18 + Math.random() * 0.22
             : finishType === "nearPost"
               ? 4.34 + Math.random() * 0.26
-              : 3.88 + shotPrecision * 1.16 + Math.random() * 0.34) * (0.98 + (ARCADE_SCORING_BOOST - 1) * 0.7);
+              : 3.88 + shotPrecision * 1.16 + Math.random() * 0.34 + longShotPowerBonus) + (p.shotPowerBias ?? 0)) * (0.98 + (ARCADE_SCORING_BOOST - 1) * 0.7) * shotWeakness;
+        p.kickSide = shotFoot.kickSide;
         applyFootballKickContact(p, game.ball);
-        game.ballVel.x = (finishDx / len) * power;
-        game.ballVel.z = (finishDz / len) * power;
+        game.ballVel.x = (aimedFinishDx / aimedLen) * power;
+        game.ballVel.z = (finishDz / aimedLen) * power;
         p.kickCooldown = finishType !== null ? 0.42 + Math.random() * 0.1 : 0.68 + Math.random() * 0.24;
-        triggerFootballKickPose(p, game.ball, finishType !== null ? 1.08 : 1);
+        triggerFootballKickPose(p, game.ball, finishType !== null ? 1.08 : 1, finishGoalX);
         registerBallTouch(game, p.team, p);
         game.deliveryType = null;
         game.deliveryTeam = 0;
         game.deliveryTimer = 0;
         game.deliverySource = null;
         game.deliveryTarget = null;
-      } else if (shouldClear) {
+      } else if (finalShouldClear) {
         const clearDx = clearanceOption.x - game.ball.position.x;
         const clearDz = clearanceOption.z - game.ball.position.z;
         const clearLen = Math.max(0.001, Math.hypot(clearDx, clearDz));
+        const clearFoot = getFootballFootedness(p, game.ball, clearanceOption.x);
+        p.kickSide = clearFoot.kickSide;
         applyFootballKickContact(p, game.ball);
         game.ballVel.x = (clearDx / clearLen) * clearanceOption.power;
         game.ballVel.z = (clearDz / clearLen) * clearanceOption.power;
         p.kickCooldown = 0.44 + Math.random() * 0.16;
-        triggerFootballKickPose(p, game.ball, 0.96);
+        triggerFootballKickPose(p, game.ball, 0.96, clearanceOption.x);
         registerBallTouch(game, p.team, p);
         game.deliveryType = null;
         game.deliveryTeam = 0;
         game.deliveryTimer = 0;
         game.deliverySource = null;
         game.deliveryTarget = null;
-      } else if (shouldPass) {
+      } else if (finalShouldPass) {
         const passTarget = passOption.player;
         const runLeadBias = passOption.throughRun ? THREE.MathUtils.clamp((passTarget.goalRunTimer ?? 0) / 1.8, 0, 1.2) : 0;
         const leadTime = (passOption.leadTime ?? 0.42) + (escapeMode ? 0.22 : 0.08) + Math.min(escapeMode ? 0.42 : 0.34, passOption.dist * (escapeMode ? 0.044 : 0.038)) + runLeadBias * (escapeMode ? 0.08 : 0.16);
@@ -3988,12 +4474,18 @@ function updateFootballGame(game, dt) {
         const passDx = leadX - game.ball.position.x;
         const passDz = leadZ - game.ball.position.z;
         const passLen = Math.max(0.001, Math.hypot(passDx, passDz));
-        const power = escapeMode ? 3.45 + Math.min(2.85, passLen * 0.36) : 2.7 + Math.min(2.45, passLen * 0.34) + (passOption.throughRun ? 0.28 + runLeadBias * 0.42 : 0);
+        const passFoot = getFootballFootedness(p, game.ball, leadX);
+        const passWeakness = passFoot.weakFoot ? 0.92 : 1;
+        const passAimDx = passDx + THREE.MathUtils.clamp((p.passVision ?? 0) * Math.sign(passDx || p.team) * 0.18, -0.18, 0.18);
+        const passAimLen = Math.max(0.001, Math.hypot(passAimDx, passDz));
+        const longPassBonus = passLen > 6 ? FOOTBALL_BEHAVIOR.passPowerBonusBase + Math.min(0.6, (passLen - 6) * FOOTBALL_BEHAVIOR.passPowerBonusScale) : 0;
+        const power = (escapeMode ? 3.45 + Math.min(2.85, passLen * 0.36) : 2.7 + Math.min(2.45, passLen * 0.34) + (passOption.throughRun ? 0.28 + runLeadBias * 0.42 : 0) + longPassBonus) * passWeakness;
+        p.kickSide = passFoot.kickSide;
         applyFootballKickContact(p, game.ball);
-        game.ballVel.x = (passDx / passLen) * power;
-        game.ballVel.z = (passDz / passLen) * power;
+        game.ballVel.x = (passAimDx / passAimLen) * power;
+        game.ballVel.z = (passDz / passAimLen) * power;
         p.kickCooldown = 0.52 + Math.random() * 0.24;
-        triggerFootballKickPose(p, game.ball, 0.9 + (passOption.progressive ? 0.08 : 0) + (passOption.throughRun ? 0.1 : 0));
+        triggerFootballKickPose(p, game.ball, 0.9 + (passOption.progressive ? 0.08 : 0) + (passOption.throughRun ? 0.1 : 0), leadX);
         registerBallTouch(game, p.team, p);
         game.deliveryType = "pass";
         game.deliveryTeam = p.team;
@@ -4007,11 +4499,12 @@ function updateFootballGame(game, dt) {
         const driveZ = p.team * (escapeMode ? 4.7 + Math.random() * 1.7 : 2.15 + Math.random() * 1);
         const driveLen = Math.max(0.001, Math.hypot(driveX, driveZ));
         const power = escapeMode ? 3.85 + Math.random() * 0.95 : 2.25 + Math.random() * 0.72;
+        p.kickSide = getFootballFootedness(p, game.ball, game.ball.position.x + driveX).kickSide;
         applyFootballKickContact(p, game.ball);
         game.ballVel.x = (driveX / driveLen) * power;
         game.ballVel.z = (driveZ / driveLen) * power;
         p.kickCooldown = 0.42 + Math.random() * 0.22;
-        triggerFootballKickPose(p, game.ball, 0.86);
+        triggerFootballKickPose(p, game.ball, 0.86, game.ball.position.x + driveX);
         registerBallTouch(game, p.team, p);
         game.deliveryType = null;
         game.deliveryTeam = 0;
@@ -4279,6 +4772,8 @@ function getFootballBroadcastPack(game) {
       goalZ: goalPoint.z,
       attackSide: celebration.team,
       boxZoom: 0.92,
+      midfieldLock: 0,
+      goalRush: 1,
       spread: THREE.MathUtils.clamp(spread, 2.6, 5.4),
       points
     };
@@ -4307,7 +4802,19 @@ function getFootballBroadcastPack(game) {
       : game.ball.position.z >= 0
         ? 1
         : -1;
+  const midfieldLaneBias = 1 - THREE.MathUtils.clamp(
+    (Math.abs(game.ball.position.x) - FOOTBALL_FIELD_HALF_WIDTH * 0.28) / Math.max(0.001, FOOTBALL_FIELD_HALF_WIDTH * 0.2),
+    0,
+    1
+  );
+  const midfieldDepthBias = 1 - THREE.MathUtils.clamp(
+    (Math.abs(game.ball.position.z) - FOOTBALL_FIELD_HALF_LENGTH * 0.3) / Math.max(0.001, FOOTBALL_FIELD_HALF_LENGTH * 0.17),
+    0,
+    1
+  );
+  const midfieldLock = midfieldLaneBias * midfieldDepthBias;
   const boxZoom = THREE.MathUtils.clamp((attackSide * game.ball.position.z - (FOOTBALL_FIELD_HALF_LENGTH - 8.2)) / 5.2, 0, 1);
+  const goalRush = THREE.MathUtils.clamp((attackSide * game.ball.position.z - (FOOTBALL_FIELD_HALF_LENGTH - 9.6)) / 4.6, 0, 1);
   const attackGoalZ = attackSide * (FOOTBALL_FIELD_HALF_LENGTH - 0.9);
   const goalPoint = {
     x: 0,
@@ -4361,6 +4868,8 @@ function getFootballBroadcastPack(game) {
     goalZ: goalPoint.z,
     attackSide,
     boxZoom,
+    midfieldLock,
+    goalRush,
     spread: THREE.MathUtils.clamp(spread, 3.2, 9.8),
     points
   };
@@ -4370,16 +4879,18 @@ function makeFootballBroadcastSetup(side, pack, zoom) {
   const zoomTighten = 1 - pack.boxZoom * 0.42;
   const defendGoalZ = -pack.goalZ;
   const midfieldBiasZ = THREE.MathUtils.lerp(0, defendGoalZ, 0.28 - pack.boxZoom * 0.08);
-  const sidelineX = side * ((FOOTBALL_FIELD_HALF_WIDTH + 2.25) * zoomTighten);
-  const height = (5.15 + pack.spread * 0.08) * zoom * (1 - pack.boxZoom * 0.22);
+  const goalTrackZ = THREE.MathUtils.lerp(pack.ballZ, pack.goalZ, 0.18 + pack.goalRush * 0.56 + pack.boxZoom * 0.08);
+  const trackBlend = Math.max(pack.boxZoom * 0.72, pack.goalRush * 0.94) * (1 - pack.midfieldLock * 0.72);
+  const sidelineX = side * ((FOOTBALL_FIELD_HALF_WIDTH + 2.25 - pack.goalRush * 0.42) * zoomTighten);
+  const height = (5.15 + pack.spread * 0.08) * zoom * (1 - pack.boxZoom * 0.22 - pack.goalRush * 0.08);
   const trackZ = THREE.MathUtils.clamp(
-    midfieldBiasZ,
+    THREE.MathUtils.lerp(midfieldBiasZ, goalTrackZ, trackBlend),
     -FOOTBALL_FIELD_HALF_LENGTH + 1.1,
     FOOTBALL_FIELD_HALF_LENGTH - 1.1
   );
   const lookY = 1.34 + Math.min(0.56, pack.spread * 0.05);
-  const lookX = THREE.MathUtils.lerp(pack.goalX, pack.ballX, 0.08 + pack.boxZoom * 0.05);
-  const lookZ = THREE.MathUtils.lerp(pack.goalZ, pack.ballZ, 0.1 + pack.boxZoom * 0.04);
+  const lookX = THREE.MathUtils.lerp(pack.goalX, pack.ballX, 0.08 + pack.boxZoom * 0.05 + pack.midfieldLock * 0.06);
+  const lookZ = THREE.MathUtils.lerp(pack.goalZ, pack.ballZ, 0.12 + pack.boxZoom * 0.06 - pack.goalRush * 0.05);
   return {
     side,
     x: sidelineX,
@@ -4465,6 +4976,7 @@ function updateCamera(dt) {
     camera.position.copy(dollyPos);
     camera.lookAt(lookX, lookY, lookZ);
   } else if (state.activeCam === 3) {
+    state.cam3SwitchCooldown = Math.max(0, state.cam3SwitchCooldown - dt);
     const pack = getFootballBroadcastPack(footballGame);
     const broadcastZoom = CAMERA_ZOOM_DEFAULTS[3];
     const desiredA = makeFootballBroadcastSetup(1, pack, broadcastZoom);
@@ -4489,11 +5001,28 @@ function updateCamera(dt) {
     const standbySetup = liveSide > 0 ? state.cam3SetupB : state.cam3SetupA;
     const liveFrame = scoreFootballBroadcastSetup(liveSetup, pack);
     const standbyFrame = scoreFootballBroadcastSetup(standbySetup, pack);
-    const standbyReady = standbyFrame.ballVisible && standbyFrame.goalVisible && standbyFrame.ballEdge < 0.62;
-    const shouldSwitch = (liveFrame.ballEdge > 0.75 || !liveFrame.ballVisible || !liveFrame.goalVisible) && standbyReady;
+    const standbyReady = standbyFrame.ballVisible
+      && standbyFrame.goalVisible
+      && standbyFrame.ballEdge < THREE.MathUtils.lerp(0.62, 0.76, pack.midfieldLock);
+    const scoreGain = standbyFrame.score - liveFrame.score;
+    const centralHold = pack.midfieldLock > 0.55 && liveFrame.ballVisible && liveFrame.ballEdge < 0.98;
+    const edgeTrigger = liveFrame.ballEdge > THREE.MathUtils.lerp(0.75, 0.92, pack.midfieldLock);
+    const scoreMargin = Math.max(0.8, THREE.MathUtils.lerp(1.2, 4.1, pack.midfieldLock) - pack.goalRush * 0.35);
+    const emergencySwitch = !liveFrame.ballVisible || liveFrame.ballEdge > THREE.MathUtils.lerp(0.94, 1.06, pack.midfieldLock);
+    const goalSideSwitch = pack.goalRush > 0.22
+      && standbyFrame.ballEdge + 0.08 < liveFrame.ballEdge
+      && scoreGain > Math.max(0.65, scoreMargin * 0.5);
+    const shouldSwitch = state.cam3SwitchCooldown <= 0
+      && standbyReady
+      && (
+        emergencySwitch
+        || (!centralHold && edgeTrigger && scoreGain > scoreMargin)
+        || (!centralHold && goalSideSwitch)
+      );
     if (shouldSwitch) {
       state.cam3Side = -liveSide;
       state.cam3SideBlend = state.cam3Side;
+      state.cam3SwitchCooldown = THREE.MathUtils.lerp(0.42, 0.24, pack.goalRush);
     }
 
     const activeSetup = state.cam3Side >= 0 ? state.cam3SetupA : state.cam3SetupB;
@@ -4509,6 +5038,7 @@ function updateCamera(dt) {
     const moveDx = state.x - state.cam2PrevX;
     const moveDz = state.z - state.cam2PrevZ;
     const moveLen = Math.hypot(moveDx, moveDz);
+    state.cam2Motion = THREE.MathUtils.damp(state.cam2Motion, moveLen, 9, dt);
     if (moveLen > 0.003) {
       const moveAngle = Math.atan2(moveDx, moveDz);
       const camForwardX = -Math.sin(state.cam2Yaw);
@@ -4528,7 +5058,15 @@ function updateCamera(dt) {
     if (state.z > state.cam2FocusZ + deadZoneZ) state.cam2FocusZ = state.z - deadZoneZ;
     else if (state.z < state.cam2FocusZ - deadZoneZ) state.cam2FocusZ = state.z + deadZoneZ;
 
-    const closeUpMode = moveLen < 0.045;
+    const closeUpExitThreshold = 0.052;
+    const closeUpEnterThreshold = 0.032;
+    if (state.cam2CloseUp) {
+      if (state.cam2Motion > closeUpExitThreshold) state.cam2CloseUp = false;
+    } else if (state.cam2Motion < closeUpEnterThreshold) {
+      state.cam2CloseUp = true;
+    }
+
+    const closeUpMode = state.cam2CloseUp;
     const cam2Distance = state.cam2Distance * (closeUpMode ? 0.5 : 0.78);
     const cam2Height = closeUpMode ? 3.02 : state.cam2Height * 0.9;
     const orbitX = Math.sin(state.cam2Yaw) * cam2Distance;
