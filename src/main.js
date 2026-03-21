@@ -33,6 +33,10 @@ const FOOTBALL_GOAL_WIDTH = 8.8;
 const FOOTBALL_GOAL_HEIGHT = 3.75;
 const FOOTBALL_GOAL_DEPTH = 3.1;
 const FOOTBALL_BALL_RADIUS = 0.24;
+const FOOTBALL_TOUCHLINE_BUFFER = 2.6;
+const FOOTBALL_REFEREE_TOUCHLINE_MARGIN = 1.1;
+const FOOTBALL_REFEREE_BALL_SAFE_RADIUS = 3.6;
+const FOOTBALL_REFEREE_LANE_SAFE_RADIUS = 2.2;
 const FOOTBALL_BALL_GRAVITY = 18.5;
 const FOOTBALL_BALL_GROUND_BOUNCE = 0.44;
 const FOOTBALL_BALL_CONTROL_HEIGHT = 0.72;
@@ -62,6 +66,8 @@ const TRACK_RUNNER_PASS_FRONT_CLEARANCE = 3.8;
 const TRACK_RUNNER_PASS_BACK_CLEARANCE = 1.9;
 const TRACK_RUNNER_LANE_CHANGE_RATE = 3.4;
 const TRACK_RUNNER_MAX_PASS_LANE = 2;
+const HAIR_STYLE_VARIANTS = ["short", "parted", "curly", "bob", "spiky", "bangs", "pigtails"];
+const HAIR_COLOR_VARIANTS = [0x2f1a0f, 0x5a3822, 0xc89b58, 0x121416, 0x6d4932];
 const CAMERA_NAMES = {
   1: "1 FREE",
   2: "2 JUKU FOLLOW",
@@ -187,11 +193,11 @@ function normalizeFootballRosterEntry(entry, teamName, lane) {
 function getFootballSpeedProfileModifiers(speedProfile) {
   switch (speedProfile) {
     case "slow":
-      return { speedBias: -0.2, burstBoost: -0.08 };
+      return { speedBias: -0.28, burstBoost: -0.12 };
     case "fast":
-      return { speedBias: 0.16, burstBoost: 0.08 };
+      return { speedBias: 0.24, burstBoost: 0.12 };
     case "sprinter":
-      return { speedBias: 0.26, burstBoost: 0.16 };
+      return { speedBias: 0.42, burstBoost: 0.24 };
     default:
       return { speedBias: 0, burstBoost: 0 };
   }
@@ -880,6 +886,292 @@ function addScaledPart(parent, geometry, color, pos, scale, rot) {
   return mesh;
 }
 
+function addHumanoidTorso(parent, palette) {
+  const shirtBase = palette.shirt;
+  const shirtBright = palette.shirtBright ?? new THREE.Color(shirtBase).multiplyScalar(1.08).getHex();
+  const shirtMid = palette.shirtMid ?? new THREE.Color(shirtBase).multiplyScalar(0.94).getHex();
+  const shirtDark = palette.shirtDark ?? new THREE.Color(shirtBase).multiplyScalar(0.82).getHex();
+
+  const upperTorso = addScaledPart(
+    parent,
+    new THREE.CapsuleGeometry(0.18, 0.32, 7, 18),
+    shirtBase,
+    new THREE.Vector3(0, 0.22, 0.015),
+    new THREE.Vector3(1.4, 1.02, 1.16)
+  );
+  upperTorso.rotation.x = THREE.MathUtils.degToRad(-3);
+
+  const lowerTorso = addScaledPart(
+    parent,
+    new THREE.CapsuleGeometry(0.14, 0.26, 7, 18),
+    shirtDark,
+    new THREE.Vector3(0, -0.025, 0),
+    new THREE.Vector3(1.28, 1.06, 1.08)
+  );
+  lowerTorso.rotation.x = THREE.MathUtils.degToRad(5);
+
+  const chest = addScaledPart(
+    parent,
+    new THREE.SphereGeometry(0.2, 22, 18),
+    shirtBright,
+    new THREE.Vector3(0, 0.155, 0.12),
+    new THREE.Vector3(1.08, 0.92, 0.8)
+  );
+  chest.rotation.x = THREE.MathUtils.degToRad(-4);
+
+  const belly = addScaledPart(
+    parent,
+    new THREE.SphereGeometry(0.18, 20, 16),
+    shirtMid,
+    new THREE.Vector3(0, -0.01, 0.115),
+    new THREE.Vector3(1.18, 1.02, 0.78)
+  );
+  belly.rotation.x = THREE.MathUtils.degToRad(8);
+
+  addScaledPart(
+    parent,
+    new THREE.SphereGeometry(0.15, 18, 14),
+    shirtBase,
+    new THREE.Vector3(-0.2, 0.27, 0.02),
+    new THREE.Vector3(0.94, 0.78, 1)
+  );
+  addScaledPart(
+    parent,
+    new THREE.SphereGeometry(0.15, 18, 14),
+    shirtBase,
+    new THREE.Vector3(0.2, 0.27, 0.02),
+    new THREE.Vector3(0.94, 0.78, 1)
+  );
+
+  return { upperTorso, lowerTorso, chest, belly };
+}
+
+function addHumanoidHips(parent, color, pos) {
+  const hipCore = addScaledPart(
+    parent,
+    new THREE.SphereGeometry(0.2, 20, 16),
+    color,
+    pos,
+    new THREE.Vector3(1.45, 0.92, 1.12)
+  );
+
+  addScaledPart(
+    parent,
+    new THREE.SphereGeometry(0.13, 16, 12),
+    color,
+    new THREE.Vector3(pos.x - 0.2, pos.y + 0.01, pos.z),
+    new THREE.Vector3(1.08, 0.92, 1.02)
+  );
+  addScaledPart(
+    parent,
+    new THREE.SphereGeometry(0.13, 16, 12),
+    color,
+    new THREE.Vector3(pos.x + 0.2, pos.y + 0.01, pos.z),
+    new THREE.Vector3(1.08, 0.92, 1.02)
+  );
+
+  return hipCore;
+}
+
+function addHairStyle(head, palette, options = {}) {
+  const style = options.style ?? "short";
+  const hair = palette.hair;
+  const hairDark = options.hairDark ?? new THREE.Color(hair).multiplyScalar(0.72).getHex();
+  const hairLight = options.hairLight ?? new THREE.Color(hair).multiplyScalar(1.08).getHex();
+
+  const crown = addPart(
+    head,
+    new THREE.SphereGeometry(0.43, 26, 20, 0, Math.PI * 2, 0, Math.PI * 0.54),
+    hair,
+    new THREE.Vector3(0, 0.21, -0.045)
+  );
+  crown.scale.set(0.9, 0.72, 0.92);
+
+  const fringe = addScaledPart(
+    head,
+    new THREE.SphereGeometry(0.16, 18, 14),
+    hairLight,
+    new THREE.Vector3(0, 0.19, 0.27),
+    new THREE.Vector3(1.32, 0.45, 0.6)
+  );
+
+  const sideLeft = addScaledPart(
+    head,
+    new THREE.SphereGeometry(0.15, 16, 12),
+    hairDark,
+    new THREE.Vector3(-0.26, 0.13, 0.06),
+    new THREE.Vector3(0.7, 1.05, 0.82)
+  );
+  const sideRight = addScaledPart(
+    head,
+    new THREE.SphereGeometry(0.15, 16, 12),
+    hairDark,
+    new THREE.Vector3(0.26, 0.13, 0.06),
+    new THREE.Vector3(0.7, 1.05, 0.82)
+  );
+
+  if (style === "parted") {
+    fringe.scale.set(1.18, 0.36, 0.56);
+    fringe.position.y = 0.17;
+    fringe.position.z = 0.24;
+    fringe.rotation.z = THREE.MathUtils.degToRad(4);
+
+    const part = addScaledPart(
+      head,
+      new THREE.SphereGeometry(0.11, 14, 10),
+      hairLight,
+      new THREE.Vector3(0.08, 0.26, 0.12),
+      new THREE.Vector3(0.86, 0.26, 1.22)
+    );
+    part.rotation.z = THREE.MathUtils.degToRad(-20);
+  } else if (style === "curly") {
+    crown.scale.set(0.94, 0.8, 0.95);
+    fringe.visible = false;
+    const curlOffsets = [
+      [-0.2, 0.16, 0.22],
+      [0, 0.2, 0.28],
+      [0.2, 0.16, 0.22],
+      [-0.12, 0.27, 0.11],
+      [0.12, 0.27, 0.11]
+    ];
+    for (let i = 0; i < curlOffsets.length; i += 1) {
+      const [x, y, z] = curlOffsets[i];
+      addScaledPart(
+        head,
+        new THREE.SphereGeometry(0.095, 14, 12),
+        i % 2 === 0 ? hair : hairLight,
+        new THREE.Vector3(x, y, z),
+        new THREE.Vector3(1.02, 0.98, 0.92)
+      );
+    }
+  } else if (style === "bob") {
+    crown.scale.set(0.92, 0.76, 0.95);
+    fringe.scale.set(1.08, 0.32, 0.5);
+    fringe.position.y = 0.16;
+    const back = addScaledPart(
+      head,
+      new THREE.SphereGeometry(0.18, 18, 14),
+      hairDark,
+      new THREE.Vector3(0, 0.05, -0.16),
+      new THREE.Vector3(1.02, 1.2, 0.86)
+    );
+    back.rotation.x = THREE.MathUtils.degToRad(18);
+    sideLeft.scale.set(0.86, 1.4, 0.9);
+    sideLeft.position.y = 0.03;
+    sideRight.scale.set(0.86, 1.4, 0.9);
+    sideRight.position.y = 0.03;
+  } else if (style === "spiky") {
+    crown.scale.set(0.88, 0.66, 0.9);
+    fringe.visible = false;
+    const spikeData = [
+      { x: -0.18, y: 0.29, z: 0.1, rx: -22, rz: 16, len: 0.18 },
+      { x: -0.07, y: 0.33, z: 0.14, rx: -28, rz: 8, len: 0.2 },
+      { x: 0.06, y: 0.34, z: 0.14, rx: -28, rz: -8, len: 0.2 },
+      { x: 0.18, y: 0.29, z: 0.1, rx: -22, rz: -16, len: 0.18 },
+      { x: 0, y: 0.31, z: 0.04, rx: -36, rz: 0, len: 0.17 }
+    ];
+    for (let i = 0; i < spikeData.length; i += 1) {
+      const spike = spikeData[i];
+      addPart(
+        head,
+        new THREE.CapsuleGeometry(0.03, spike.len, 4, 8),
+        i % 2 === 0 ? hair : hairLight,
+        new THREE.Vector3(spike.x, spike.y, spike.z),
+        new THREE.Euler(THREE.MathUtils.degToRad(spike.rx), 0, THREE.MathUtils.degToRad(spike.rz))
+      );
+    }
+  } else if (style === "bangs") {
+    crown.scale.set(0.91, 0.74, 0.93);
+    fringe.scale.set(1.3, 0.52, 0.62);
+    fringe.position.set(0, 0.16, 0.28);
+    const bangOffsets = [-0.16, -0.05, 0.06, 0.17];
+    for (let i = 0; i < bangOffsets.length; i += 1) {
+      const x = bangOffsets[i];
+      const bang = addPart(
+        head,
+        new THREE.CapsuleGeometry(0.026, 0.1, 4, 8),
+        i % 2 === 0 ? hairDark : hair,
+        new THREE.Vector3(x, 0.13 - Math.abs(x) * 0.08, 0.31),
+        new THREE.Euler(THREE.MathUtils.degToRad(12), 0, THREE.MathUtils.degToRad(x * -32))
+      );
+      bang.scale.z = 0.82;
+    }
+  } else if (style === "pigtails") {
+    crown.scale.set(0.9, 0.72, 0.92);
+    fringe.scale.set(1.1, 0.34, 0.54);
+    fringe.position.y = 0.17;
+    const tailLeft = addPart(
+      head,
+      new THREE.CapsuleGeometry(0.05, 0.16, 5, 10),
+      hairDark,
+      new THREE.Vector3(-0.34, 0.08, -0.03),
+      new THREE.Euler(THREE.MathUtils.degToRad(8), 0, THREE.MathUtils.degToRad(38))
+    );
+    tailLeft.scale.set(0.96, 1.08, 0.88);
+    const tailRight = addPart(
+      head,
+      new THREE.CapsuleGeometry(0.05, 0.16, 5, 10),
+      hairDark,
+      new THREE.Vector3(0.34, 0.08, -0.03),
+      new THREE.Euler(THREE.MathUtils.degToRad(8), 0, THREE.MathUtils.degToRad(-38))
+    );
+    tailRight.scale.set(0.96, 1.08, 0.88);
+    addScaledPart(
+      head,
+      new THREE.SphereGeometry(0.055, 12, 10),
+      hairLight,
+      new THREE.Vector3(-0.24, 0.18, 0.02),
+      new THREE.Vector3(0.92, 0.82, 0.9)
+    );
+    addScaledPart(
+      head,
+      new THREE.SphereGeometry(0.055, 12, 10),
+      hairLight,
+      new THREE.Vector3(0.24, 0.18, 0.02),
+      new THREE.Vector3(0.92, 0.82, 0.9)
+    );
+  } else {
+    fringe.rotation.x = THREE.MathUtils.degToRad(-6);
+  }
+
+  return { crown, fringe, sideLeft, sideRight };
+}
+
+function makeStripedShirtMaterial(base = 0xf7f7f4, stripe = 0x111214) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = `#${base.toString(16).padStart(6, "0")}`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = `#${stripe.toString(16).padStart(6, "0")}`;
+  const stripeWidth = 6;
+  const gap = 4;
+  for (let x = 0; x < canvas.width; x += stripeWidth + gap) {
+    ctx.fillRect(x, 0, stripeWidth, canvas.height);
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(1, 1);
+  texture.needsUpdate = true;
+
+  return new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: texture,
+    roughness: 0.92
+  });
+}
+
+function applyStripedShirtToTorso(torso, base = 0xf7f7f4, stripe = 0x111214) {
+  const stripedMaterial = makeStripedShirtMaterial(base, stripe);
+  torso.traverse((obj) => {
+    if (!obj.isMesh) return;
+    obj.material = stripedMaterial;
+  });
+}
+
 function buildOpenHand(parent, palette, side) {
   const hand = new THREE.Group();
   parent.add(hand);
@@ -1065,25 +1357,24 @@ function buildJuku() {
     pants: 0xc5202a,
     shoe: 0x151618,
     hair: 0x2f1a0f,
-    white: 0xf6f7fb
+    white: 0xf6f7fb,
+    hairStyle: "short"
   };
 
   const torso = new THREE.Group();
   torso.position.set(0, 2.15, -0.03);
   root.add(torso);
-  const hips = addPart(root, new THREE.CylinderGeometry(0.42, 0.34, 0.28, 28), palette.pants, new THREE.Vector3(0, 1.81, -0.02));
-  hips.scale.z = 0.88;
-  addPart(torso, new THREE.CylinderGeometry(0.48, 0.39, 0.24, 28), palette.shirt, new THREE.Vector3(0, 0.43, 0));
-  addPart(torso, new THREE.CylinderGeometry(0.39, 0.27, 0.32, 28), palette.shirt, new THREE.Vector3(0, 0.15, 0));
-  addPart(torso, new THREE.CylinderGeometry(0.27, 0.34, 0.23, 28), 0x275aa4, new THREE.Vector3(0, -0.12, 0));
-  const chest = addPart(torso, new THREE.SphereGeometry(0.18, 18, 14), 0x3b6fc1, new THREE.Vector3(0, 0.18, 0.15));
-  chest.scale.set(0.85, 1.1, 0.34);
-  const belly = addPart(torso, new THREE.SphereGeometry(0.16, 18, 14), 0x3768b7, new THREE.Vector3(0, -0.05, 0.13));
-  belly.scale.set(0.8, 1, 0.32);
+  const hips = addHumanoidHips(root, palette.pants, new THREE.Vector3(0, 1.81, -0.02));
+  addHumanoidTorso(torso, {
+    shirt: palette.shirt,
+    shirtBright: 0x3b6fc1,
+    shirtMid: 0x3768b7,
+    shirtDark: 0x275aa4
+  });
 
   addPart(root, new THREE.TorusGeometry(0.17, 0.04, 10, 20), palette.white, new THREE.Vector3(0, 2.75, 0.02), new THREE.Euler(Math.PI / 2, 0, 0));
-  const neck = addPart(root, new THREE.CylinderGeometry(0.095, 0.12, 0.27, 16), palette.skin, new THREE.Vector3(0, 2.89, 0.01));
-  neck.scale.z = 0.88;
+  const neck = addPart(root, new THREE.CylinderGeometry(0.1, 0.12, 0.22, 16), palette.skin, new THREE.Vector3(0, 2.88, 0.01));
+  neck.scale.z = 0.9;
 
   const head = new THREE.Group();
   head.position.set(0, 3.27, 0);
@@ -1094,8 +1385,7 @@ function buildJuku() {
   addPart(head, new THREE.SphereGeometry(0.09, 16, 12), palette.skin, new THREE.Vector3(-0.4, 0.03, 0));
   addPart(head, new THREE.SphereGeometry(0.09, 16, 12), palette.skin, new THREE.Vector3(0.4, 0.03, 0));
 
-  const hairCap = addPart(head, new THREE.SphereGeometry(0.45, 26, 18, 0, Math.PI * 2, 0, Math.PI * 0.46), palette.hair, new THREE.Vector3(0, 0.23, -0.035));
-  hairCap.scale.set(0.94, 0.82, 0.95);
+  addHairStyle(head, palette, { style: palette.hairStyle });
 
   const leftEye = new THREE.Group();
   leftEye.position.set(-0.138, 0.058, 0.372);
@@ -1188,8 +1478,8 @@ function buildJuku() {
 
   const leftArm = buildArm(palette, false);
   const rightArm = buildArm(palette, true);
-  leftArm.root.position.set(0.47, 2.49, 0);
-  rightArm.root.position.set(-0.47, 2.49, 0);
+  leftArm.root.position.set(0.43, 2.5, 0.01);
+  rightArm.root.position.set(-0.43, 2.5, 0.01);
   root.add(leftArm.root, rightArm.root);
 
   const heldSword = buildSword();
@@ -1200,8 +1490,8 @@ function buildJuku() {
 
   const leftLeg = buildLeg(palette);
   const rightLeg = buildLeg(palette);
-  leftLeg.root.position.set(0.17, 1.58, -0.02);
-  rightLeg.root.position.set(-0.17, 1.58, -0.02);
+  leftLeg.root.position.set(0.155, 1.59, -0.02);
+  rightLeg.root.position.set(-0.155, 1.59, -0.02);
   root.add(leftLeg.root, rightLeg.root);
 
   return {
@@ -1245,13 +1535,13 @@ function buildArm(palette, swordHand) {
   const lowerPivot = new THREE.Group();
   const handPivot = new THREE.Group();
   root.add(upperPivot);
-  addPart(upperPivot, new THREE.SphereGeometry(0.084, 18, 14), palette.skin, new THREE.Vector3(0, 0, 0));
-  addPart(upperPivot, new THREE.CylinderGeometry(0.066, 0.056, 0.35, 18), palette.skin, new THREE.Vector3(0, -0.175, 0));
-  lowerPivot.position.set(0, -0.35, 0);
+  addPart(upperPivot, new THREE.SphereGeometry(0.076, 18, 14), palette.skin, new THREE.Vector3(0, 0, 0));
+  addPart(upperPivot, new THREE.CylinderGeometry(0.058, 0.05, 0.31, 18), palette.skin, new THREE.Vector3(0, -0.155, 0));
+  lowerPivot.position.set(0, -0.31, 0);
   upperPivot.add(lowerPivot);
-  addPart(lowerPivot, new THREE.SphereGeometry(0.066, 16, 12), palette.skin, new THREE.Vector3(0, 0, 0));
-  addPart(lowerPivot, new THREE.CylinderGeometry(0.053, 0.044, 0.31, 18), palette.skin, new THREE.Vector3(0, -0.155, 0));
-  handPivot.position.set(0, -0.31, 0);
+  addPart(lowerPivot, new THREE.SphereGeometry(0.06, 16, 12), palette.skin, new THREE.Vector3(0, 0, 0));
+  addPart(lowerPivot, new THREE.CylinderGeometry(0.047, 0.04, 0.28, 18), palette.skin, new THREE.Vector3(0, -0.14, 0));
+  handPivot.position.set(0, -0.28, 0);
   lowerPivot.add(handPivot);
 
   if (swordHand) {
@@ -1269,11 +1559,11 @@ function buildLeg(palette) {
   const root = new THREE.Group();
   const kneePivot = new THREE.Group();
   const footPivot = new THREE.Group();
-  addPart(root, new THREE.SphereGeometry(0.092, 16, 12), palette.pants, new THREE.Vector3(0, 0, 0));
-  addPart(root, new THREE.CylinderGeometry(0.094, 0.074, 0.56, 18), palette.pants, new THREE.Vector3(0, -0.28, 0));
-  kneePivot.position.set(0, -0.56, 0);
+  addPart(root, new THREE.SphereGeometry(0.086, 16, 12), palette.pants, new THREE.Vector3(0, 0, 0));
+  addPart(root, new THREE.CylinderGeometry(0.082, 0.068, 0.5, 18), palette.pants, new THREE.Vector3(0, -0.25, 0));
+  kneePivot.position.set(0, -0.5, 0);
   root.add(kneePivot);
-  addPart(kneePivot, new THREE.SphereGeometry(0.094, 14, 10), palette.pants, new THREE.Vector3(0, 0, 0));
+  addPart(kneePivot, new THREE.SphereGeometry(0.086, 14, 10), palette.pants, new THREE.Vector3(0, 0, 0));
   addScaledPart(
     kneePivot,
     new THREE.SphereGeometry(0.05, 12, 10),
@@ -1281,8 +1571,8 @@ function buildLeg(palette) {
     new THREE.Vector3(0, 0.009, 0.058),
     new THREE.Vector3(0.96, 0.72, 0.48)
   );
-  addPart(kneePivot, new THREE.CylinderGeometry(0.078, 0.064, 0.5, 18), palette.pants, new THREE.Vector3(0, -0.25, 0));
-  footPivot.position.set(0, -0.5, 0);
+  addPart(kneePivot, new THREE.CylinderGeometry(0.07, 0.058, 0.44, 18), palette.pants, new THREE.Vector3(0, -0.22, 0));
+  footPivot.position.set(0, -0.44, 0);
   kneePivot.add(footPivot);
   addPart(footPivot, new THREE.SphereGeometry(0.074, 12, 10), palette.shoe, new THREE.Vector3(0, 0, 0));
   addScaledPart(
@@ -1829,7 +2119,8 @@ function buildRunner(colors) {
     pants: colors.shorts ?? 0x1f2f43,
     shoe: colors.shoe ?? 0x161718,
     hair: colors.hair ?? 0x2f1a0f,
-    white: 0xf6f7fb
+    white: 0xf6f7fb,
+    hairStyle: colors.hairStyle ?? "short"
   };
   const shirtBright = new THREE.Color(palette.shirt).multiplyScalar(1.08).getHex();
   const shirtDark = new THREE.Color(palette.shirt).multiplyScalar(0.82).getHex();
@@ -1841,19 +2132,17 @@ function buildRunner(colors) {
   const torso = new THREE.Group();
   torso.position.set(0, 2.15, -0.03);
   root.add(torso);
-  const hips = addPart(root, new THREE.CylinderGeometry(0.42, 0.34, 0.28, 28), palette.pants, new THREE.Vector3(0, 1.81, -0.02));
-  hips.scale.z = 0.88;
-  addPart(torso, new THREE.CylinderGeometry(0.48, 0.39, 0.24, 28), palette.shirt, new THREE.Vector3(0, 0.43, 0));
-  addPart(torso, new THREE.CylinderGeometry(0.39, 0.27, 0.32, 28), palette.shirt, new THREE.Vector3(0, 0.15, 0));
-  addPart(torso, new THREE.CylinderGeometry(0.27, 0.34, 0.23, 28), shirtDark, new THREE.Vector3(0, -0.12, 0));
-  const chest = addPart(torso, new THREE.SphereGeometry(0.18, 18, 14), shirtBright, new THREE.Vector3(0, 0.18, 0.15));
-  chest.scale.set(0.85, 1.1, 0.34);
-  const belly = addPart(torso, new THREE.SphereGeometry(0.16, 18, 14), shirtMid, new THREE.Vector3(0, -0.05, 0.13));
-  belly.scale.set(0.8, 1, 0.32);
+  const hips = addHumanoidHips(root, palette.pants, new THREE.Vector3(0, 1.81, -0.02));
+  addHumanoidTorso(torso, {
+    shirt: palette.shirt,
+    shirtBright,
+    shirtMid,
+    shirtDark
+  });
 
   addPart(root, new THREE.TorusGeometry(0.17, 0.04, 10, 20), palette.white, new THREE.Vector3(0, 2.75, 0.02), new THREE.Euler(Math.PI / 2, 0, 0));
-  const neck = addPart(root, new THREE.CylinderGeometry(0.095, 0.12, 0.27, 16), palette.skin, new THREE.Vector3(0, 2.89, 0.01));
-  neck.scale.z = 0.88;
+  const neck = addPart(root, new THREE.CylinderGeometry(0.1, 0.12, 0.22, 16), palette.skin, new THREE.Vector3(0, 2.88, 0.01));
+  neck.scale.z = 0.9;
 
   const head = new THREE.Group();
   head.position.set(0, 3.27, 0);
@@ -1864,8 +2153,7 @@ function buildRunner(colors) {
   addPart(head, new THREE.SphereGeometry(0.09, 16, 12), palette.skin, new THREE.Vector3(-0.4, 0.03, 0));
   addPart(head, new THREE.SphereGeometry(0.09, 16, 12), palette.skin, new THREE.Vector3(0.4, 0.03, 0));
 
-  const hairCap = addPart(head, new THREE.SphereGeometry(0.45, 26, 18, 0, Math.PI * 2, 0, Math.PI * 0.46), palette.hair, new THREE.Vector3(0, 0.23, -0.035));
-  hairCap.scale.set(0.94, 0.82, 0.95);
+  addHairStyle(head, palette, { style: palette.hairStyle });
 
   const leftEye = new THREE.Group();
   leftEye.position.set(-0.138, 0.058, 0.372);
@@ -1919,14 +2207,14 @@ function buildRunner(colors) {
 
   const leftArmRig = buildArm(palette, false);
   const rightArmRig = buildArm(palette, false);
-  leftArmRig.root.position.set(0.47, 2.49, 0);
-  rightArmRig.root.position.set(-0.47, 2.49, 0);
+  leftArmRig.root.position.set(0.43, 2.5, 0.01);
+  rightArmRig.root.position.set(-0.43, 2.5, 0.01);
   root.add(leftArmRig.root, rightArmRig.root);
 
   const leftLegRig = buildLeg(palette);
   const rightLegRig = buildLeg(palette);
-  leftLegRig.root.position.set(0.17, 1.58, -0.02);
-  rightLegRig.root.position.set(-0.17, 1.58, -0.02);
+  leftLegRig.root.position.set(0.155, 1.59, -0.02);
+  rightLegRig.root.position.set(-0.155, 1.59, -0.02);
   root.add(leftLegRig.root, rightLegRig.root);
 
   root.traverse((obj) => {
@@ -1989,11 +2277,13 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
     const happy = 0.62 + 0.38 * blend;
     const strideBoost = 1 + sprintAmount * 0.35;
     const athleteKneeLift = runner.athleteKneeLift ?? 1;
-    const swing = Math.sin(cycle) * 1.02 * blend * strideBoost;
+    const kneeLiftScale = THREE.MathUtils.clamp(0.82 + (athleteKneeLift - 0.9) * 0.45, 0.72, 1.04);
+    const swing = Math.sin(cycle) * 0.84 * blend * strideBoost * kneeLiftScale;
     const sideSwing = Math.sin(cycle) * 0.82 * sideStepAmount;
     const motionScale = runner.motionScale ?? 1;
     const bounce = Math.abs(Math.sin(cycle * 1.08)) * 0.032 * happy * (1 + sprintAmount * 0.22) * motionScale;
-    const diveLift = Math.sin(keeperDiveAmount * Math.PI) * (0.18 + keeperDiveHeight * 0.12) * motionScale;
+    const diveArc = Math.sin(Math.pow(keeperDiveAmount, 0.84) * Math.PI);
+    const diveLift = diveArc * (0.24 + keeperDiveHeight * 0.18) * motionScale;
     const groundedKeeper = (keeperSetAmount > 0.02 || sideStepAmount > 0.02) && keeperDiveAmount <= 0.001;
     runner.root.position.y = runner.baseY + (groundedKeeper ? 0 : bounce) + jumpY * motionScale + diveLift - keeperSetAmount * 0.018 * motionScale;
     runner.torsoPivot.position.x = 0;
@@ -2008,11 +2298,11 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
       ];
       athleteLegData.forEach(({ leg, phase, side }) => {
         const stridePhase = Math.sin(phase);
-        let kneePitch = 14 + (1 - stridePhase) * (16 + athleteKneeLift * 5.5) * blend + sprintAmount * (6 + athleteKneeLift * 5 + Math.max(0, -stridePhase) * (3 + athleteKneeLift * 1.8));
-        let anklePitch = -9 - Math.max(0, stridePhase) * (7 + athleteKneeLift * 1.8) * blend - (kneePitch - 14) * 0.22;
+        let kneePitch = 11 + (1 - stridePhase) * (11 + athleteKneeLift * 3.2) * blend + sprintAmount * (3.8 + athleteKneeLift * 2.4 + Math.max(0, -stridePhase) * (2.2 + athleteKneeLift * 1.1));
+        let anklePitch = -8 - Math.max(0, stridePhase) * (5.2 + athleteKneeLift * 1.2) * blend - (kneePitch - 11) * 0.18;
         if (sideStepAmount > 0) {
           const sidePhase = side === sideStepDir ? phase : phase + Math.PI * 0.5;
-          kneePitch = THREE.MathUtils.lerp(kneePitch, 28 + (1 - Math.sin(sidePhase)) * 12, sideStepAmount);
+          kneePitch = THREE.MathUtils.lerp(kneePitch, 24 + (1 - Math.sin(sidePhase)) * 10, sideStepAmount);
           anklePitch = THREE.MathUtils.lerp(anklePitch, -8 - Math.cos(sidePhase) * 5, sideStepAmount);
         }
         leg.kneePivot.rotation.x = THREE.MathUtils.degToRad(kneePitch);
@@ -2046,21 +2336,21 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
       const trailArm = dir > 0 ? runner.rightArm : runner.leftArm;
       const leadLeg = dir > 0 ? runner.leftLeg : runner.rightLeg;
       const trailLeg = dir > 0 ? runner.rightLeg : runner.leftLeg;
-      runner.torsoPivot.position.x = dir * (0.11 + keeperDiveHeight * 0.05) * dive;
-      runner.torsoPivot.rotation.z += dir * 0.98 * dive;
-      runner.torsoPivot.rotation.x = -0.12 - (0.42 + keeperDiveHeight * 0.2) * dive;
-      runner.head.rotation.z += dir * 0.18 * dive;
-      runner.head.rotation.x = -(0.08 + keeperDiveHeight * 0.12) * dive;
-      leadArm.rotation.x = -(1.96 + keeperDiveHeight * 0.44) * dive;
-      leadArm.rotation.z = dir * (1.48 + keeperDiveHeight * 0.3) * dive;
-      leadArm.rotation.y = dir * 0.28 * dive;
-      trailArm.rotation.x = -(1.42 + keeperDiveHeight * 0.28) * dive;
-      trailArm.rotation.z = dir * (0.72 + keeperDiveHeight * 0.16) * dive;
-      trailArm.rotation.y = -dir * 0.18 * dive;
-      leadLeg.rotation.x = (0.34 + keeperDiveHeight * 0.56) * dive;
-      leadLeg.rotation.z = dir * (0.24 + keeperDiveHeight * 0.18) * dive;
-      trailLeg.rotation.x = -(0.96 + keeperDiveHeight * 0.28) * dive;
-      trailLeg.rotation.z = -dir * 0.28 * dive;
+      runner.torsoPivot.position.x = dir * (0.15 + keeperDiveHeight * 0.08) * dive;
+      runner.torsoPivot.rotation.z += dir * 1.16 * dive;
+      runner.torsoPivot.rotation.x = -0.16 - (0.5 + keeperDiveHeight * 0.24) * dive;
+      runner.head.rotation.z += dir * 0.22 * dive;
+      runner.head.rotation.x = -(0.12 + keeperDiveHeight * 0.14) * dive;
+      leadArm.rotation.x = -(2.18 + keeperDiveHeight * 0.5) * dive;
+      leadArm.rotation.z = dir * (1.7 + keeperDiveHeight * 0.34) * dive;
+      leadArm.rotation.y = dir * 0.34 * dive;
+      trailArm.rotation.x = -(1.56 + keeperDiveHeight * 0.32) * dive;
+      trailArm.rotation.z = dir * (0.86 + keeperDiveHeight * 0.2) * dive;
+      trailArm.rotation.y = -dir * 0.22 * dive;
+      leadLeg.rotation.x = (0.22 + keeperDiveHeight * 0.44) * dive;
+      leadLeg.rotation.z = dir * (0.34 + keeperDiveHeight * 0.22) * dive;
+      trailLeg.rotation.x = -(1.14 + keeperDiveHeight * 0.32) * dive;
+      trailLeg.rotation.z = -dir * 0.34 * dive;
     }
 
     if (celebrationAmount > 0) {
@@ -2094,7 +2384,8 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
   const leadSide = stride >= 0 ? 1 : -1;
   const sideStride = Math.sin(cycle * 1.18) * sideStepAmount;
   const bounce = Math.abs(Math.sin(cycle * 1.08)) * 0.024 * (0.4 + blend * 0.8 + sprintBlend * 0.14) * motionScale;
-  const keeperDiveLift = Math.sin(keeperDiveAmount * Math.PI) * (0.22 + keeperDiveHeight * 0.16) * motionScale;
+  const keeperDiveArc = Math.sin(Math.pow(keeperDiveAmount, 0.84) * Math.PI);
+  const keeperDiveLift = keeperDiveArc * (0.3 + keeperDiveHeight * 0.22) * motionScale;
   runner.root.position.y = runner.baseY + bounce + jumpY * motionScale + keeperDiveLift;
   runner.torsoPivot.position.x = 0.035 * hurdlePose + sideStepDir * 0.04 * sideStepAmount;
   runner.torsoPivot.rotation.z = Math.sin(cycle * 0.5) * 0.09 * blend + sideStepDir * 0.18 * sideStepAmount;
@@ -2143,9 +2434,9 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
   ];
   legData.forEach(({ leg, side }) => {
     const walkPhase = side === -1 ? cycle : cycle + Math.PI;
-    let hipPitch = Math.sin(walkPhase) * 30 * blend * (1 + sprintBlend * 0.24);
-    let kneePitch = 10 + (10 + 22 * ((-Math.sin(walkPhase) + 1) * 0.5)) * blend + sprintBlend * (4 + Math.max(0, -Math.sin(walkPhase)) * 8);
-    let anklePitch = -6 - hipPitch * 0.4 - (kneePitch - 8) * 0.24 - sprintBlend * 2;
+    let hipPitch = Math.sin(walkPhase) * 24 * blend * (1 + sprintBlend * 0.18);
+    let kneePitch = 9 + (8 + 17 * ((-Math.sin(walkPhase) + 1) * 0.5)) * blend + sprintBlend * (3 + Math.max(0, -Math.sin(walkPhase)) * 5.5);
+    let anklePitch = -6 - hipPitch * 0.34 - (kneePitch - 8) * 0.2 - sprintBlend * 1.5;
     let hipRoll = THREE.MathUtils.degToRad(side * (4.5 + Math.sin(cycle * 0.5) * 0.8) * blend);
     if (airBlend > 0) {
       const leadLeg = side === leadSide;
@@ -2220,33 +2511,33 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
     const trailArm = dir > 0 ? runner.rightArmRig.upperPivot : runner.leftArmRig.upperPivot;
     const leadLeg = dir > 0 ? runner.leftLegRig.root : runner.rightLegRig.root;
     const trailLeg = dir > 0 ? runner.rightLegRig.root : runner.leftLegRig.root;
-    runner.torsoPivot.position.x = dir * (0.17 + keeperDiveHeight * 0.1) * dive;
-    runner.torsoPivot.rotation.z += dir * (1.02 + keeperDiveHeight * 0.12) * dive;
-    runner.torsoPivot.rotation.x = -0.14 - (0.38 + keeperDiveHeight * 0.28) * dive;
+    runner.torsoPivot.position.x = dir * (0.24 + keeperDiveHeight * 0.14) * dive;
+    runner.torsoPivot.rotation.z += dir * (1.2 + keeperDiveHeight * 0.16) * dive;
+    runner.torsoPivot.rotation.x = -0.2 - (0.48 + keeperDiveHeight * 0.34) * dive;
     if (runner.hips) {
-      runner.hips.rotation.z += dir * (0.2 + keeperDiveHeight * 0.14) * dive;
-      runner.hips.rotation.y += dir * (0.08 + keeperDiveHeight * 0.12) * dive;
+      runner.hips.rotation.z += dir * (0.28 + keeperDiveHeight * 0.18) * dive;
+      runner.hips.rotation.y += dir * (0.12 + keeperDiveHeight * 0.16) * dive;
     }
     if (runner.head) {
-      runner.head.rotation.z += dir * (0.18 + keeperDiveHeight * 0.12) * dive;
-      runner.head.rotation.x = Math.min(runner.head.rotation.x, -(0.1 + keeperDiveHeight * 0.14) * dive);
+      runner.head.rotation.z += dir * (0.24 + keeperDiveHeight * 0.14) * dive;
+      runner.head.rotation.x = Math.min(runner.head.rotation.x, -(0.14 + keeperDiveHeight * 0.18) * dive);
     }
-    leadArm.rotation.x = -(1.9 + keeperDiveHeight * 0.5) * dive;
-    leadArm.rotation.z = dir * (1.56 + keeperDiveHeight * 0.34) * dive;
-    leadArm.rotation.y = dir * (0.22 + keeperDiveHeight * 0.18) * dive;
-    trailArm.rotation.x = -(1.38 + keeperDiveHeight * 0.32) * dive;
-    trailArm.rotation.z = dir * (0.84 + keeperDiveHeight * 0.18) * dive;
-    trailArm.rotation.y = -dir * 0.18 * dive;
-    runner.leftArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(runner.leftArmRig.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-28 - keeperDiveHeight * 18), dive * (dir > 0 ? 1 : 0.65));
-    runner.rightArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(runner.rightArmRig.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-28 - keeperDiveHeight * 18), dive * (dir < 0 ? 1 : 0.65));
-    leadLeg.rotation.x = (0.46 + keeperDiveHeight * 0.48) * dive;
-    leadLeg.rotation.z = dir * (0.3 + keeperDiveHeight * 0.22) * dive;
-    trailLeg.rotation.x = -(1.02 + keeperDiveHeight * 0.34) * dive;
-    trailLeg.rotation.z = -dir * 0.34 * dive;
-    runner.leftLegRig.kneePivot.rotation.x = THREE.MathUtils.lerp(runner.leftLegRig.kneePivot.rotation.x, THREE.MathUtils.degToRad(dir > 0 ? 24 : 76), dive);
-    runner.rightLegRig.kneePivot.rotation.x = THREE.MathUtils.lerp(runner.rightLegRig.kneePivot.rotation.x, THREE.MathUtils.degToRad(dir < 0 ? 24 : 76), dive);
-    runner.leftLegRig.footPivot.rotation.x = THREE.MathUtils.lerp(runner.leftLegRig.footPivot.rotation.x, THREE.MathUtils.degToRad(dir > 0 ? -22 : 18), dive);
-    runner.rightLegRig.footPivot.rotation.x = THREE.MathUtils.lerp(runner.rightLegRig.footPivot.rotation.x, THREE.MathUtils.degToRad(dir < 0 ? -22 : 18), dive);
+    leadArm.rotation.x = -(2.08 + keeperDiveHeight * 0.6) * dive;
+    leadArm.rotation.z = dir * (1.76 + keeperDiveHeight * 0.4) * dive;
+    leadArm.rotation.y = dir * (0.3 + keeperDiveHeight * 0.22) * dive;
+    trailArm.rotation.x = -(1.52 + keeperDiveHeight * 0.38) * dive;
+    trailArm.rotation.z = dir * (0.94 + keeperDiveHeight * 0.2) * dive;
+    trailArm.rotation.y = -dir * 0.22 * dive;
+    runner.leftArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(runner.leftArmRig.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-34 - keeperDiveHeight * 22), dive * (dir > 0 ? 1 : 0.7));
+    runner.rightArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(runner.rightArmRig.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-34 - keeperDiveHeight * 22), dive * (dir < 0 ? 1 : 0.7));
+    leadLeg.rotation.x = (0.22 + keeperDiveHeight * 0.34) * dive;
+    leadLeg.rotation.z = dir * (0.4 + keeperDiveHeight * 0.26) * dive;
+    trailLeg.rotation.x = -(1.18 + keeperDiveHeight * 0.38) * dive;
+    trailLeg.rotation.z = -dir * 0.4 * dive;
+    runner.leftLegRig.kneePivot.rotation.x = THREE.MathUtils.lerp(runner.leftLegRig.kneePivot.rotation.x, THREE.MathUtils.degToRad(dir > 0 ? 18 : 82), dive);
+    runner.rightLegRig.kneePivot.rotation.x = THREE.MathUtils.lerp(runner.rightLegRig.kneePivot.rotation.x, THREE.MathUtils.degToRad(dir < 0 ? 18 : 82), dive);
+    runner.leftLegRig.footPivot.rotation.x = THREE.MathUtils.lerp(runner.leftLegRig.footPivot.rotation.x, THREE.MathUtils.degToRad(dir > 0 ? -28 : 20), dive);
+    runner.rightLegRig.footPivot.rotation.x = THREE.MathUtils.lerp(runner.rightLegRig.footPivot.rotation.x, THREE.MathUtils.degToRad(dir < 0 ? -28 : 20), dive);
   }
 
   if (celebrationAmount > 0) {
@@ -2363,15 +2654,13 @@ function buildFootballGame() {
     shirt: 0xf3f4f6,
     shorts: 0x16181c,
     shoe: 0x121316,
+    hair: 0x2a1a12,
+    hairStyle: "parted",
     runnerStyle: "athlete"
   }));
   refereeRunner.root.position.set(FOOTBALL_FIELD_HALF_WIDTH + 1.15, refereeRunner.baseY, -3.4);
   refereeRunner.root.rotation.y = THREE.MathUtils.degToRad(-90);
-  const stripeOffsets = [-0.18, -0.12, -0.06, 0, 0.06, 0.12, 0.18];
-  for (let i = 0; i < stripeOffsets.length; i += 1) {
-    const z = stripeOffsets[i];
-    addPart(refereeRunner.torsoPivot, new THREE.BoxGeometry(0.07, 0.9, 0.035), 0x111214, new THREE.Vector3(0, 0.16, z));
-  }
+  applyStripedShirtToTorso(refereeRunner.torsoPivot, 0xf7f7f4, 0x111214);
   const whistle = addPart(
     refereeRunner.leftArmRig.handPivot,
     new THREE.BoxGeometry(0.05, 0.022, 0.016),
@@ -2401,6 +2690,10 @@ function buildFootballGame() {
   const coach = {
     runner: refereeRunner,
     label: refereeNameTag,
+    vx: 0,
+    vz: 0,
+    targetX: 0,
+    targetZ: -3.4,
     sidelineOffset: FOOTBALL_FIELD_HALF_WIDTH + 1.15,
     perimeterOffset: 1.15,
     perimeterT: getFootballPerimeterTFromPoint(FOOTBALL_FIELD_HALF_WIDTH + 1.15, -3.4, 1.15),
@@ -2428,24 +2721,28 @@ function buildFootballGame() {
     const role = rosterEntry.role;
     const homeX = rosterEntry.homeX ?? (homeXByLane[lane] ?? 0);
     const defaultHomeZ = role === "keeper"
-      ? -team * (FOOTBALL_FIELD_HALF_LENGTH - 5.1)
+      ? -team * (FOOTBALL_FIELD_HALF_LENGTH - 2.35)
       : role === "defender"
         ? -team * (FOOTBALL_FIELD_HALF_LENGTH * 0.44 - Math.abs(homeX) * 0.05) + (Math.random() - 0.5) * 0.8
         : -team * (FOOTBALL_FIELD_HALF_LENGTH * 0.22 - Math.abs(homeX) * 0.04) + (Math.random() - 0.5) * 1.1;
     const homeZ = rosterEntry.homeZ ?? defaultHomeZ;
+    const hairStyle = HAIR_STYLE_VARIANTS[(i + (team === 1 ? 0 : 2)) % HAIR_STYLE_VARIANTS.length];
+    const hairColor = HAIR_COLOR_VARIANTS[(lane + (team === 1 ? 1 : 3)) % HAIR_COLOR_VARIANTS.length];
     const runner = scaleRunner(buildRunner({
       shirt: team === 1 ? 0xcf3a2f : 0x1d58b4,
       shorts: team === 1 ? 0x6a1f1b : 0x163869,
       shoe: 0x151617,
+      hair: hairColor,
+      hairStyle,
       runnerStyle: "athlete"
     }));
     runner.athleteKneeLift = rosterEntry.speedProfile === "sprinter"
-      ? 1.24
+      ? 1.06
       : rosterEntry.speedProfile === "fast"
-        ? 1.12
+        ? 0.98
         : rosterEntry.speedProfile === "slow"
-          ? 0.92
-          : 1;
+          ? 0.84
+          : 0.9;
     runner.root.position.set(homeX, runner.baseY, homeZ);
     const nameTag = makeFootballNameTag(
       `${rosterEntry.number} - ${rosterEntry.name}`,
@@ -2455,10 +2752,10 @@ function buildFootballGame() {
     nameTag.position.set(0, 4.18, 0);
     runner.root.add(nameTag);
     const frontNumber = makeFootballNumberPatch(String(rosterEntry.number), team === 1 ? "#991b1b" : "#1e40af");
-    frontNumber.position.set(0, 0.22, 0.31);
+    frontNumber.position.set(0, 0.19, 0.285);
     runner.torsoPivot.add(frontNumber);
     const backNumber = makeFootballNumberPatch(String(rosterEntry.number), team === 1 ? "#991b1b" : "#1e40af");
-    backNumber.position.set(0, 0.22, -0.31);
+    backNumber.position.set(0, 0.19, -0.24);
     backNumber.rotation.y = Math.PI;
     runner.torsoPivot.add(backNumber);
     group.add(runner.root);
@@ -2516,6 +2813,7 @@ function buildFootballGame() {
       laneBias: homeX * 0.34 + (Math.random() - 0.5) * 0.24,
       pressBias: basePressBias + traitModifiers.pressBias,
       speedBias: baseSpeedBias + traitModifiers.speedBias + speedProfileModifiers.speedBias,
+      paceVariance: role === "attacker" ? 0.82 + Math.random() * 0.42 : role === "defender" ? 0.86 + Math.random() * 0.32 : 0.9 + Math.random() * 0.22,
       strideRate: rosterEntry.speedProfile === "sprinter" ? 1.14 : rosterEntry.speedProfile === "fast" ? 1.07 : rosterEntry.speedProfile === "slow" ? 0.94 : 1,
       tempoPhase: Math.random() * Math.PI * 2,
       tempoRate: 0.85 + Math.random() * 0.65,
@@ -2552,6 +2850,9 @@ function buildFootballGame() {
       saveHeight: 0.45,
       diveDir: 0,
       diveBlend: 0,
+      commitForwardTimer: 0,
+      commitTargetX: homeX,
+      commitTargetZ: homeZ,
       nextShuffle: 0.55 + Math.random() * 1.25
     });
   }
@@ -2564,6 +2865,8 @@ function buildFootballGame() {
       shirt: trackPalette[i % trackPalette.length],
       shorts: 0x202431,
       shoe: 0x151617,
+      hair: HAIR_COLOR_VARIANTS[(i + 2) % HAIR_COLOR_VARIANTS.length],
+      hairStyle: HAIR_STYLE_VARIANTS[(i + 1) % HAIR_STYLE_VARIANTS.length],
       runnerStyle: "athlete"
     }));
     const laneIndex = 0;
@@ -2944,8 +3247,9 @@ function resolveFootballPlayerSpacing(players, dt, pushScale = 1) {
   }
   for (let i = 0; i < players.length; i += 1) {
     const p = players[i];
-    p.runner.root.position.x = THREE.MathUtils.clamp(p.runner.root.position.x, -FOOTBALL_FIELD_HALF_WIDTH + 0.4, FOOTBALL_FIELD_HALF_WIDTH - 0.4);
-    p.runner.root.position.z = THREE.MathUtils.clamp(p.runner.root.position.z, -FOOTBALL_FIELD_HALF_LENGTH + 0.4, FOOTBALL_FIELD_HALF_LENGTH - 0.4);
+    const clamped = clampFootballHumanPosition(p.runner.root.position.x, p.runner.root.position.z);
+    p.runner.root.position.x = clamped.x;
+    p.runner.root.position.z = clamped.z;
   }
 }
 
@@ -3073,6 +3377,9 @@ function resetFootballKickoff(game) {
     p.saveLift = 0;
     p.diveDir = 0;
     p.diveBlend = 0;
+    p.commitForwardTimer = 0;
+    p.commitTargetX = kickoffTarget.x;
+    p.commitTargetZ = kickoffTarget.z;
     p.roamX = p.role === "attacker" ? (Math.random() - 0.5) * 1.9 : (Math.random() - 0.5) * 1.1;
     p.roamZ = p.role === "attacker" ? (Math.random() - 0.5) * 1.4 : (Math.random() - 0.5) * 0.8;
     p.kickoffRole = "shape";
@@ -3298,9 +3605,11 @@ function updateGoalCelebration(game, dt) {
 
     const moveSpeed = Math.hypot(p.vx, p.vz);
     if (moveSpeed > 0.06 && dirLen > 0.15) {
-      p.runner.root.rotation.y = Math.atan2(p.vx, p.vz);
+      const targetYaw = Math.atan2(p.vx, p.vz);
+      p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, targetYaw, dt, 6.6);
     } else {
-      p.runner.root.rotation.y = Math.atan2(lookX - p.runner.root.position.x, lookZ - p.runner.root.position.z);
+      const lookYaw = Math.atan2(lookX - p.runner.root.position.x, lookZ - p.runner.root.position.z);
+      p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, lookYaw, dt, 4.6);
     }
     p.kickBlend = Math.max(0, (p.kickBlend ?? 0) - dt * 6.4);
     p.cycle += dt * (5.2 + moveSpeed * 2.9 + jumpY * 3.4 + (pose.type === "celebration" ? pose.amount * 1.4 : 0));
@@ -3378,6 +3687,19 @@ function triggerFootballKickPose(player, ball, amount = 1, targetX = null) {
   player.kickBlend = Math.max(player.kickBlend ?? 0, THREE.MathUtils.clamp(amount, 0.45, 1.15));
 }
 
+function commitFootballRun(player, targetX, targetZ, duration = 0.46) {
+  if (!player) return;
+  player.commitForwardTimer = Math.max(player.commitForwardTimer ?? 0, duration);
+  player.commitTargetX = targetX;
+  player.commitTargetZ = targetZ;
+}
+
+function steerFootballFacing(currentYaw, targetYaw, dt, maxTurnRate = 8.4) {
+  const delta = Math.atan2(Math.sin(targetYaw - currentYaw), Math.cos(targetYaw - currentYaw));
+  const maxStep = maxTurnRate * dt;
+  return currentYaw + THREE.MathUtils.clamp(delta, -maxStep, maxStep);
+}
+
 function applyFootballKickContact(player, ball) {
   if (!player?.runner || !ball) return;
   const kickSide = player.kickSide === 0 ? 1 : Math.sign(player.kickSide ?? 1);
@@ -3415,13 +3737,22 @@ function findBestPassTarget(carrier, teammates, opponents) {
   let bestScore = -Infinity;
   let bestDistance = 0;
   let bestGoalGain = -Infinity;
+  let bestLaneTraffic = 0;
+  let bestInterceptRisk = 0;
+  let bestFrontBlockerRisk = 0;
   let bestProgressiveTarget = null;
   let bestProgressiveScore = -Infinity;
   let bestProgressiveDistance = 0;
   let bestProgressiveGoalGain = -Infinity;
+  let bestProgressiveLaneTraffic = 0;
+  let bestProgressiveInterceptRisk = 0;
+  let bestProgressiveFrontBlockerRisk = 0;
   let bestFreeForwardAttacker = null;
   let bestFreeForwardScore = -Infinity;
   let bestFreeForwardDistance = 0;
+  let bestFreeForwardLaneTraffic = 0;
+  let bestFreeForwardInterceptRisk = 0;
+  let bestFreeForwardFrontBlockerRisk = 0;
   const ownGoalDepth = -carrier.runner.root.position.z * carrier.team;
   const escapeBias = THREE.MathUtils.clamp((ownGoalDepth - (FOOTBALL_FIELD_HALF_LENGTH - 7.2)) / 3.4, 0, 1.55);
   const ownThirdTrapBias = THREE.MathUtils.clamp((ownGoalDepth - (FOOTBALL_FIELD_HALF_LENGTH - 7.9)) / 2.8, 0, 1.5);
@@ -3453,6 +3784,7 @@ function findBestPassTarget(carrier, teammates, opponents) {
     let laneTraffic = 0;
     let interceptRisk = 0;
     let frontBlockerRisk = 0;
+    let laneGuardCount = 0;
     let directLaneBlock = false;
     for (let j = 0; j < opponents.length; j += 1) {
       const opp = opponents[j];
@@ -3470,6 +3802,9 @@ function findBestPassTarget(carrier, teammates, opponents) {
       if (along > 0.12 && along < 0.92 && laneDist < 0.82) interceptRisk += (0.82 - laneDist) * 1.6;
       if (forward > 0.2 && along > 0.18 && along < 0.88 && laneDist < 0.58) {
         frontBlockerRisk += (0.58 - laneDist) * (1.05 - Math.abs(along - 0.52) * 0.8) * 2.4;
+      }
+      if (along > 0.14 && along < 0.9 && laneDist < 1.02) {
+        laneGuardCount += 1;
       }
       if (forward > 0.35 && along > 0.22 && along < 0.82 && laneDist < 0.34) {
         directLaneBlock = true;
@@ -3534,13 +3869,16 @@ function findBestPassTarget(carrier, teammates, opponents) {
     const combinationBias = (mate.goalRunTimer > 0 ? 0.72 : 0.18) + supportRoleBias + (openness > 0.45 && forward > 0.7 ? 0.28 : 0);
     const oneTwoBias = oneTwoReturnBias > 0 ? openness * 1.1 + Math.max(0, forward) * 0.8 + 2.8 : 0;
     const score = openness * 2.7 + longPassBias * 2.15 + throughBias * 2.45 + switchBias * 0.62 + roleBias + profileBias + counterBias + laneRoleBias + overlapBias + underlapBias + poachBias + farPostBias + edgeBias + switchPlayBias + diagonalSplitBias + runnerFeedBias + combinationBias + oneTwoBias + boxServiceBias + attackDepthBias * 2.2 + goalHangBias * 1.7 + attackerGoalBias * 2.05 + breakRunBias * 1.8 + runLaneReward * 1.25 + escapeForwardBias * 2.45 + escapeLongBias * 1.85 + ownThirdOutletBias * 2.35 + ownThirdSwitchBias
-      - recyclePenalty * (oneTwoReturnBias > 0 ? 1.35 : 2.8) - backwardPenalty * (oneTwoReturnBias > 0 ? 1.6 : 3.8) - nonProgressiveAttackerPenalty * 2.1 - deepRecyclePenalty * 2.8 - deepDefenderLoopPenalty * 3.2 - laneTraffic * (1.65 + escapeBias * 0.12) - interceptRisk * (1.4 + escapeBias * 0.08) - frontBlockerRisk * (oneTwoReturnBias > 0 ? 1.4 : 2.6)
+      - recyclePenalty * (oneTwoReturnBias > 0 ? 1.35 : 2.8) - backwardPenalty * (oneTwoReturnBias > 0 ? 1.6 : 3.8) - nonProgressiveAttackerPenalty * 2.1 - deepRecyclePenalty * 2.8 - deepDefenderLoopPenalty * 3.2 - laneTraffic * (1.85 + escapeBias * 0.18) - interceptRisk * (1.7 + escapeBias * 0.12) - frontBlockerRisk * (oneTwoReturnBias > 0 ? 1.6 : 3.1) - laneGuardCount * 0.3
       + (carrier.passVision ?? 0) * (progressiveBias * 0.9 + openness * 0.55 + Math.max(0, goalGain) * 0.2);
     if (score > bestScore) {
       bestScore = score;
       bestTarget = mate;
       bestDistance = dist;
       bestGoalGain = goalGain;
+      bestLaneTraffic = laneTraffic;
+      bestInterceptRisk = interceptRisk;
+      bestFrontBlockerRisk = frontBlockerRisk;
     }
 
     const isProgressiveTarget = forward > 0.55 && goalGain > 0.35;
@@ -3551,6 +3889,9 @@ function findBestPassTarget(carrier, teammates, opponents) {
         bestProgressiveTarget = mate;
         bestProgressiveDistance = dist;
         bestProgressiveGoalGain = goalGain;
+        bestProgressiveLaneTraffic = laneTraffic;
+        bestProgressiveInterceptRisk = interceptRisk;
+        bestProgressiveFrontBlockerRisk = frontBlockerRisk;
       }
     }
 
@@ -3569,6 +3910,9 @@ function findBestPassTarget(carrier, teammates, opponents) {
         bestFreeForwardScore = freeForwardScore;
         bestFreeForwardAttacker = mate;
         bestFreeForwardDistance = dist;
+        bestFreeForwardLaneTraffic = laneTraffic;
+        bestFreeForwardInterceptRisk = interceptRisk;
+        bestFreeForwardFrontBlockerRisk = frontBlockerRisk;
       }
     }
   }
@@ -3592,6 +3936,9 @@ function findBestPassTarget(carrier, teammates, opponents) {
   const selectedTarget = useFreeForwardAttacker ? bestFreeForwardAttacker : (useProgressiveTarget ? bestProgressiveTarget : bestTarget);
   const selectedDistance = useFreeForwardAttacker ? bestFreeForwardDistance : (useProgressiveTarget ? bestProgressiveDistance : bestDistance);
   const selectedScore = useFreeForwardAttacker ? bestFreeForwardScore : (useProgressiveTarget ? bestProgressiveScore : bestScore);
+  const selectedLaneTraffic = useFreeForwardAttacker ? bestFreeForwardLaneTraffic : (useProgressiveTarget ? bestProgressiveLaneTraffic : bestLaneTraffic);
+  const selectedInterceptRisk = useFreeForwardAttacker ? bestFreeForwardInterceptRisk : (useProgressiveTarget ? bestProgressiveInterceptRisk : bestInterceptRisk);
+  const selectedFrontBlockerRisk = useFreeForwardAttacker ? bestFreeForwardFrontBlockerRisk : (useProgressiveTarget ? bestProgressiveFrontBlockerRisk : bestFrontBlockerRisk);
 
   return selectedScore > 1
     ? {
@@ -3604,7 +3951,10 @@ function findBestPassTarget(carrier, teammates, opponents) {
         progressive: selectedTarget ? (((selectedTarget.runner.root.position.z - carrier.runner.root.position.z) * carrier.team) > 0.55 && ((selectedTarget.runner.root.position.z * carrier.team) - (carrier.runner.root.position.z * carrier.team)) > 0.35) : false,
         forcedForward: selectedTarget ? selectedTarget === bestFreeForwardAttacker : false,
         throughRun: selectedTarget ? selectedTarget.role === "attacker" && (selectedTarget.goalRunTimer ?? 0) > 0.18 : false,
-        leadTime: selectedTarget ? 0.42 + THREE.MathUtils.clamp((selectedTarget.goalRunTimer ?? 0) / 1.8, 0, 1.3) * 0.24 : 0.42
+        leadTime: selectedTarget ? 0.42 + THREE.MathUtils.clamp((selectedTarget.goalRunTimer ?? 0) / 1.8, 0, 1.3) * 0.24 : 0.42,
+        laneTraffic: selectedLaneTraffic,
+        interceptRisk: selectedInterceptRisk,
+        frontBlockerRisk: selectedFrontBlockerRisk
       }
     : null;
 }
@@ -3825,8 +4175,8 @@ function findClearanceTarget(carrier, teammates, opponents) {
 }
 
 function clampFootballHumanPosition(x, z) {
-  const fieldX = THREE.MathUtils.clamp(x, -FOOTBALL_FIELD_HALF_WIDTH + 0.4, FOOTBALL_FIELD_HALF_WIDTH - 0.4);
-  const fieldZ = THREE.MathUtils.clamp(z, -FOOTBALL_FIELD_HALF_LENGTH + 0.4, FOOTBALL_FIELD_HALF_LENGTH - 0.4);
+  const fieldX = THREE.MathUtils.clamp(x, -FOOTBALL_FIELD_HALF_WIDTH - FOOTBALL_TOUCHLINE_BUFFER, FOOTBALL_FIELD_HALF_WIDTH + FOOTBALL_TOUCHLINE_BUFFER);
+  const fieldZ = THREE.MathUtils.clamp(z, -FOOTBALL_FIELD_HALF_LENGTH - FOOTBALL_TOUCHLINE_BUFFER, FOOTBALL_FIELD_HALF_LENGTH + FOOTBALL_TOUCHLINE_BUFFER);
   const goalLine = FOOTBALL_FIELD_HALF_LENGTH - 0.9;
   const goalDepthLimit = goalLine + FOOTBALL_GOAL_DEPTH - 0.38;
   const goalMouthHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 - 0.18;
@@ -3837,6 +4187,13 @@ function clampFootballHumanPosition(x, z) {
     };
   }
   return { x: fieldX, z: fieldZ };
+}
+
+function clampFootballRefereePosition(x, z) {
+  return {
+    x: THREE.MathUtils.clamp(x, -FOOTBALL_FIELD_HALF_WIDTH + FOOTBALL_REFEREE_TOUCHLINE_MARGIN, FOOTBALL_FIELD_HALF_WIDTH - FOOTBALL_REFEREE_TOUCHLINE_MARGIN),
+    z: THREE.MathUtils.clamp(z, -FOOTBALL_FIELD_HALF_LENGTH + FOOTBALL_REFEREE_TOUCHLINE_MARGIN, FOOTBALL_FIELD_HALF_LENGTH - FOOTBALL_REFEREE_TOUCHLINE_MARGIN)
+  };
 }
 
 function clampGoalInteriorPosition(x, z) {
@@ -3916,8 +4273,9 @@ function resolvePeopleCollisions(game) {
       return;
     }
     if (person.kind === "coach") {
-      person.x = THREE.MathUtils.clamp(person.x, -WORLD_MOVE_LIMIT, WORLD_MOVE_LIMIT);
-      person.z = THREE.MathUtils.clamp(person.z, -WORLD_MOVE_LIMIT, WORLD_MOVE_LIMIT);
+      const clamped = clampFootballRefereePosition(person.x, person.z);
+      person.x = clamped.x;
+      person.z = clamped.z;
       const resolved = resolveJukuCollisions(person.x, person.z);
       person.x = resolved.x;
       person.z = resolved.z;
@@ -4029,6 +4387,120 @@ function getFootballPerimeterTFromPoint(x, z, offset = 1.15) {
   return best.d / perimeter;
 }
 
+function getFootballRefereeTarget(game) {
+  const coach = game.coach;
+  const ball = game.ball;
+  const attackSide = game.attackingTeam !== 0
+    ? game.attackingTeam
+    : Math.abs(game.ballVel.z) > 0.12
+      ? Math.sign(game.ballVel.z || 1)
+      : ball.position.z >= 0
+        ? 1
+        : -1;
+  const lateralSide = Math.abs(ball.position.x) > 0.35 ? -Math.sign(ball.position.x) : (attackSide === 0 ? 1 : -attackSide);
+  let targetX = ball.position.x * 0.38 + lateralSide * 2.9;
+  let targetZ = ball.position.z - attackSide * 4.8;
+  const attackingPlayers = game.players.filter((p) => p.team === attackSide && p.role !== "keeper");
+  if (attackingPlayers.length > 0) {
+    let sumX = 0;
+    let deepestAttackZ = -Infinity;
+    let supportLineZ = 0;
+    for (let i = 0; i < attackingPlayers.length; i += 1) {
+      const p = attackingPlayers[i];
+      sumX += p.runner.root.position.x;
+      const attackDepth = p.runner.root.position.z * attackSide;
+      deepestAttackZ = Math.max(deepestAttackZ, attackDepth);
+      supportLineZ += attackDepth;
+    }
+    const attackMeanX = sumX / attackingPlayers.length;
+    const attackMeanDepth = supportLineZ / attackingPlayers.length;
+    const refereeDepth = Math.max(
+      ball.position.z * attackSide - 4.8,
+      attackMeanDepth - 3.2,
+      deepestAttackZ - 5.1
+    ) * attackSide;
+    targetX = THREE.MathUtils.lerp(targetX, attackMeanX + lateralSide * 2.5, 0.34);
+    targetZ = THREE.MathUtils.lerp(targetZ, refereeDepth, 0.62);
+  }
+  targetX = THREE.MathUtils.lerp(targetX, ball.position.x * 0.22, THREE.MathUtils.clamp((Math.abs(ball.position.x) - FOOTBALL_FIELD_HALF_WIDTH * 0.58) / 3.2, 0, 0.45));
+  targetZ = THREE.MathUtils.lerp(targetZ, ball.position.z - attackSide * 3.9, THREE.MathUtils.clamp((Math.abs(ball.position.z) - FOOTBALL_FIELD_HALF_LENGTH * 0.52) / 4.4, 0, 0.38));
+
+  let pushX = 0;
+  let pushZ = 0;
+  const safeBallRadius = FOOTBALL_REFEREE_BALL_SAFE_RADIUS + Math.min(1.6, game.ballVel.length() * 0.18);
+  const ballDx = targetX - ball.position.x;
+  const ballDz = targetZ - ball.position.z;
+  const ballDist = Math.hypot(ballDx, ballDz);
+  if (ballDist < safeBallRadius) {
+    const nx = ballDist > 0.001 ? ballDx / ballDist : lateralSide;
+    const nz = ballDist > 0.001 ? ballDz / ballDist : -attackSide;
+    const strength = safeBallRadius - ballDist;
+    pushX += nx * strength;
+    pushZ += nz * strength;
+  }
+
+  const laneLenSq = game.ballVel.x * game.ballVel.x + game.ballVel.z * game.ballVel.z;
+  if (laneLenSq > 0.08 * 0.08) {
+    const laneLen = Math.sqrt(laneLenSq);
+    const laneDirX = game.ballVel.x / laneLen;
+    const laneDirZ = game.ballVel.z / laneLen;
+    const laneToTargetX = targetX - ball.position.x;
+    const laneToTargetZ = targetZ - ball.position.z;
+    const along = THREE.MathUtils.clamp(laneToTargetX * laneDirX + laneToTargetZ * laneDirZ, 0, Math.min(14, laneLen * 1.35));
+    const projX = ball.position.x + laneDirX * along;
+    const projZ = ball.position.z + laneDirZ * along;
+    const laneOffsetX = targetX - projX;
+    const laneOffsetZ = targetZ - projZ;
+    const laneOffset = Math.hypot(laneOffsetX, laneOffsetZ);
+    if (laneOffset < FOOTBALL_REFEREE_LANE_SAFE_RADIUS) {
+      const sideNx = laneOffset > 0.001 ? laneOffsetX / laneOffset : -laneDirZ;
+      const sideNz = laneOffset > 0.001 ? laneOffsetZ / laneOffset : laneDirX;
+      const strength = (FOOTBALL_REFEREE_LANE_SAFE_RADIUS - laneOffset) * 1.6;
+      pushX += sideNx * strength;
+      pushZ += sideNz * strength;
+    }
+  }
+
+  const attackGoalZ = attackSide * (FOOTBALL_FIELD_HALF_LENGTH - 0.9);
+  const goalFrontDepth = (attackGoalZ - targetZ) * attackSide;
+  const inGoalCorridor = goalFrontDepth >= 0 && goalFrontDepth < 8.2 && Math.abs(targetX) < FOOTBALL_GOAL_WIDTH * 0.92;
+  if (inGoalCorridor) {
+    const corridorSide = lateralSide === 0 ? 1 : lateralSide;
+    const sideExit = corridorSide * (FOOTBALL_GOAL_WIDTH * 0.96 + 1.7);
+    const depthExit = attackGoalZ - attackSide * 8.8;
+    targetX = THREE.MathUtils.lerp(targetX, sideExit, 0.82);
+    targetZ = THREE.MathUtils.lerp(targetZ, depthExit, 0.6);
+  }
+
+  for (let i = 0; i < game.players.length; i += 1) {
+    const p = game.players[i];
+    const playDist = Math.hypot(p.runner.root.position.x - ball.position.x, p.runner.root.position.z - ball.position.z);
+    const avoidRadius = playDist < 2.7 ? 1.9 : 1.15;
+    const dx = targetX - p.runner.root.position.x;
+    const dz = targetZ - p.runner.root.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < avoidRadius) {
+      const nx = dist > 0.001 ? dx / dist : Math.sign(targetX - ball.position.x || 1);
+      const nz = dist > 0.001 ? dz / dist : Math.sign(targetZ - ball.position.z || -attackSide);
+      const strength = (avoidRadius - dist) * (playDist < 2.7 ? 1.4 : 0.8);
+      pushX += nx * strength;
+      pushZ += nz * strength;
+    }
+  }
+
+  let resolvedX = targetX + pushX;
+  let resolvedZ = targetZ + pushZ;
+  const resolvedGoalFrontDepth = (attackGoalZ - resolvedZ) * attackSide;
+  if (resolvedGoalFrontDepth >= 0 && resolvedGoalFrontDepth < 7.6 && Math.abs(resolvedX) < FOOTBALL_GOAL_WIDTH * 0.86) {
+    resolvedX = Math.sign(resolvedX || lateralSide || 1) * (FOOTBALL_GOAL_WIDTH * 0.9 + 1.5);
+    resolvedZ = Math.min(resolvedZ * attackSide, (attackGoalZ - attackSide * 8.2) * attackSide) * attackSide;
+  }
+  const clamped = clampFootballRefereePosition(resolvedX, resolvedZ);
+  coach.targetX = clamped.x;
+  coach.targetZ = clamped.z;
+  return clamped;
+}
+
 function updateFootballGame(game, dt) {
   game.phase += dt;
   const cameraWorldPos = camera.getWorldPosition(new THREE.Vector3());
@@ -4037,29 +4509,29 @@ function updateFootballGame(game, dt) {
     game.coach.whistleTimer = Math.max(0, game.coach.whistleTimer - dt);
     game.coach.cardTimer = Math.max(0, game.coach.cardTimer - dt);
     game.coach.cardCooldown = Math.max(0, game.coach.cardCooldown - dt);
-    const targetT = getFootballPerimeterTFromPoint(game.ball.position.x, game.ball.position.z, game.coach.perimeterOffset);
-    if (!Number.isFinite(game.coach.perimeterT)) game.coach.perimeterT = targetT;
-    let deltaT = targetT - game.coach.perimeterT;
-    if (deltaT > 0.5) deltaT -= 1;
-    if (deltaT < -0.5) deltaT += 1;
-    const perimeter = 4 * (FOOTBALL_FIELD_HALF_WIDTH + game.coach.perimeterOffset) + 4 * (FOOTBALL_FIELD_HALF_LENGTH + game.coach.perimeterOffset);
-    const pathDist = Math.abs(deltaT) * perimeter;
-    const travel = Math.min(pathDist, dt * 4.4);
-    const moveSpeed = dt > 0 ? travel / dt : 0;
-    if (pathDist > 0.0001) {
-      game.coach.perimeterT = ((game.coach.perimeterT + (travel / perimeter) * Math.sign(deltaT)) % 1 + 1) % 1;
-    }
-    const perimeterPoint = getFootballPerimeterPoint(game.coach.perimeterT, game.coach.perimeterOffset);
-    game.coach.runner.root.position.x = perimeterPoint.x;
-    game.coach.runner.root.position.z = perimeterPoint.z;
+    const refTarget = getFootballRefereeTarget(game);
+    const refDx = refTarget.x - game.coach.runner.root.position.x;
+    const refDz = refTarget.z - game.coach.runner.root.position.z;
+    const refDist = Math.hypot(refDx, refDz);
+    const desiredSpeed = refDist > 4.2 ? 3.6 : refDist > 1.8 ? 2.6 : refDist > 0.45 ? 1.35 : 0;
+    const desiredVx = refDist > 0.001 ? (refDx / refDist) * desiredSpeed : 0;
+    const desiredVz = refDist > 0.001 ? (refDz / refDist) * desiredSpeed : 0;
+    game.coach.vx = THREE.MathUtils.damp(game.coach.vx ?? 0, desiredVx, 6.2, dt);
+    game.coach.vz = THREE.MathUtils.damp(game.coach.vz ?? 0, desiredVz, 6.2, dt);
+    game.coach.runner.root.position.x += game.coach.vx * dt;
+    game.coach.runner.root.position.z += game.coach.vz * dt;
+    const refClamped = clampFootballRefereePosition(game.coach.runner.root.position.x, game.coach.runner.root.position.z);
+    game.coach.runner.root.position.x = refClamped.x;
+    game.coach.runner.root.position.z = refClamped.z;
+    const moveSpeed = Math.hypot(game.coach.vx ?? 0, game.coach.vz ?? 0);
     const lookDx = game.ball.position.x - game.coach.runner.root.position.x;
     const lookDz = game.ball.position.z - game.coach.runner.root.position.z;
     const coachFacing = Math.atan2(lookDx, lookDz);
-    game.coach.runner.root.rotation.y = coachFacing;
+    game.coach.runner.root.rotation.y = steerFootballFacing(game.coach.runner.root.rotation.y, coachFacing, dt, 7);
     const coachRightX = Math.cos(coachFacing);
     const coachRightZ = -Math.sin(coachFacing);
-    const coachLateral = perimeterPoint.dirX * coachRightX + perimeterPoint.dirZ * coachRightZ;
-    const coachForward = perimeterPoint.dirX * Math.sin(coachFacing) + perimeterPoint.dirZ * Math.cos(coachFacing);
+    const coachLateral = (game.coach.vx ?? 0) * coachRightX + (game.coach.vz ?? 0) * coachRightZ;
+    const coachForward = (game.coach.vx ?? 0) * Math.sin(coachFacing) + (game.coach.vz ?? 0) * Math.cos(coachFacing);
     const coachSideStepAmount = Math.abs(coachLateral) > Math.abs(coachForward) + 0.08 ? THREE.MathUtils.clamp(moveSpeed / 1.6, 0, 1) : 0;
 
     game.coach.cycle += dt * (4 + moveSpeed * 1.85);
@@ -4379,7 +4851,7 @@ function updateFootballGame(game, dt) {
     const keeper = keepers[i];
     if (game.goalPending?.team === -keeper.team) continue;
     const keeperGoalZ = -keeper.team * goalLine;
-    const keeperLineZ = keeperGoalZ + keeper.team * 0.72;
+    const keeperLineZ = keeperGoalZ + keeper.team * 0.44;
     const ballToKeeper = Math.hypot(game.ball.position.x - keeper.runner.root.position.x, game.ball.position.z - keeper.runner.root.position.z);
     const ballNearGoalMouth = (keeper.team * (game.ball.position.z - keeperGoalZ)) > -4.4 && Math.abs(game.ball.position.x) < FOOTBALL_GOAL_WIDTH * 0.86;
     const ballLooseInBox = ballNearGoalMouth && game.ball.position.y <= FOOTBALL_BALL_CONTROL_HEIGHT && ballToKeeper < 2.35;
@@ -4398,9 +4870,10 @@ function updateFootballGame(game, dt) {
       registerBallTouch(game, keeper.team, keeper);
       keeper.kickCooldown = Math.max(keeper.kickCooldown ?? 0, 0.62);
       keeper.saveCooldown = 0.58;
-      keeper.diveBlend = Math.max(keeper.diveBlend, 0.18);
-      keeper.saveLift = Math.max(keeper.saveLift, 0.12);
-      keeper.saveHeight = 0.3;
+      keeper.diveDir = Math.sign(clearDx || keeper.team);
+      keeper.diveBlend = Math.max(keeper.diveBlend, 0.3);
+      keeper.saveLift = Math.max(keeper.saveLift, 0.2);
+      keeper.saveHeight = 0.38;
       continue;
     }
     const incoming = game.ballVel.z * keeper.team < -0.26;
@@ -4412,20 +4885,28 @@ function updateFootballGame(game, dt) {
     const predictedY = Number.isFinite(planeTime)
       ? game.ball.position.y + game.ballVel.y * THREE.MathUtils.clamp(planeTime, 0, 0.5) - 0.5 * FOOTBALL_BALL_GRAVITY * Math.pow(THREE.MathUtils.clamp(planeTime, 0, 0.5), 2)
       : game.ball.position.y;
-    const closeEnough = Math.hypot(game.ball.position.x - keeper.runner.root.position.x, game.ball.position.z - keeper.runner.root.position.z) < 1.48 * ARCADE_KEEPER_NERF;
-    const cutsLane = planeTime > 0 && planeTime < 0.52 && Math.abs(predictedX - keeper.runner.root.position.x) < 1.36 * ARCADE_KEEPER_NERF;
+    const closeEnough = Math.hypot(game.ball.position.x - keeper.runner.root.position.x, game.ball.position.z - keeper.runner.root.position.z) < 1.62 * ARCADE_KEEPER_NERF;
+    const cutsLane = planeTime > 0 && planeTime < 0.6 && Math.abs(predictedX - keeper.runner.root.position.x) < 1.58 * ARCADE_KEEPER_NERF;
+    const parrySide = Math.sign(predictedX - keeper.runner.root.position.x || game.ball.position.x - keeper.runner.root.position.x || 1);
     if ((closeEnough || cutsLane) && predictedY <= FOOTBALL_GOAL_HEIGHT * 0.92 && keeper.saveCooldown <= 0) {
-      const deflectX = THREE.MathUtils.clamp((game.ball.position.x - keeper.runner.root.position.x) * 1.6 + (Math.random() - 0.5) * 0.7, -2.4, 2.4);
-      const deflectZ = keeper.team * (2.8 + Math.random() * 0.9);
+      const deflectX = THREE.MathUtils.clamp((game.ball.position.x - keeper.runner.root.position.x) * 1.95 + (Math.random() - 0.5) * 0.95, -3.1, 3.1);
+      const deflectZ = keeper.team * (3.1 + Math.random() * 1.15);
       const deflectLen = Math.max(0.001, Math.hypot(deflectX, deflectZ));
       const deflectPower = 3.2 + Math.min(1.35, game.ballVel.length() * 0.42);
-      game.ball.position.z = keeperLineZ + keeper.team * 0.08;
-      setFootballBallVelocity(game, deflectX, deflectZ, deflectPower, 1.25 + Math.random() * 0.55);
-      keeper.saveCooldown = 0.82;
-      keeper.diveDir = Math.sign(predictedX - keeper.runner.root.position.x || game.ball.position.x - keeper.runner.root.position.x || 1);
+      game.ball.position.x = THREE.MathUtils.clamp(keeper.runner.root.position.x + parrySide * (0.54 + Math.min(0.26, Math.abs(predictedX - keeper.runner.root.position.x) * 0.4)), -FOOTBALL_GOAL_WIDTH * 0.56, FOOTBALL_GOAL_WIDTH * 0.56);
+      game.ball.position.z = keeperLineZ + keeper.team * 0.06;
+      setFootballBallVelocity(
+        game,
+        deflectX + parrySide * (0.8 + Math.random() * 0.7),
+        deflectZ,
+        deflectPower + 0.48,
+        1.72 + Math.random() * 0.82
+      );
+      keeper.saveCooldown = 0.9;
+      keeper.diveDir = parrySide;
       keeper.diveBlend = 1;
-      keeper.saveLift = 0.42;
-      keeper.saveHeight = THREE.MathUtils.clamp(predictedY / Math.max(0.001, FOOTBALL_GOAL_HEIGHT), 0.08, 1);
+      keeper.saveLift = THREE.MathUtils.clamp(0.42 + predictedY * 0.1, 0.42, 0.78);
+      keeper.saveHeight = THREE.MathUtils.clamp(predictedY / Math.max(0.001, FOOTBALL_GOAL_HEIGHT), 0.24, 1);
     }
   }
   let scoredTeam = 0;
@@ -4930,6 +5411,7 @@ function updateFootballGame(game, dt) {
     p.oneTwoTimer = Math.max(0, (p.oneTwoTimer ?? 0) - dt);
     p.oneTwoCooldown = Math.max(0, (p.oneTwoCooldown ?? 0) - dt);
     p.oneTwoReturnTimer = Math.max(0, (p.oneTwoReturnTimer ?? 0) - dt);
+    p.commitForwardTimer = Math.max(0, (p.commitForwardTimer ?? 0) - dt);
     if ((p.oneTwoTimer ?? 0) <= 0.001) p.oneTwoPartner = null;
     if ((p.oneTwoReturnTimer ?? 0) <= 0.001) p.oneTwoReturnTarget = null;
 
@@ -5040,27 +5522,27 @@ function updateFootballGame(game, dt) {
       }
     } else if (p.role === "keeper") {
       p.saveCooldown = Math.max(0, p.saveCooldown - dt);
-      p.diveBlend = Math.max(0, p.diveBlend - dt * 2.6);
-      p.saveLift = Math.max(0, p.saveLift - dt * (p.diveBlend > 0.08 ? 3.6 : 8.2));
+      p.diveBlend = Math.max(0, p.diveBlend - dt * 2.15);
+      p.saveLift = Math.max(0, p.saveLift - dt * (p.diveBlend > 0.08 ? 2.9 : 6.8));
       if (p.diveBlend <= 0.04 && p.saveLift < 0.035) {
         p.saveLift = 0;
       }
-      const shotOnGoal = game.ballVel.z * p.team < -0.24 && Math.abs(game.ball.position.x) < FOOTBALL_GOAL_WIDTH * 0.88;
+      const shotOnGoal = game.ballVel.z * p.team < -0.24 && Math.abs(game.ball.position.x) < FOOTBALL_GOAL_WIDTH * 0.8;
       keeperShotOnGoal = shotOnGoal;
-      const keeperLineZ = defendGoalZ + p.team * 0.72;
+      const keeperLineZ = defendGoalZ + p.team * 0.44;
       const planeTime = Math.abs(game.ballVel.z) > 0.001 ? (keeperLineZ - game.ball.position.z) / game.ballVel.z : Infinity;
       const predictedSaveX = Number.isFinite(planeTime)
         ? game.ball.position.x + game.ballVel.x * THREE.MathUtils.clamp(planeTime, 0, 0.68)
         : game.ball.position.x;
       const keeperRushDepth = shotOnGoal
-        ? 0.72 + Math.min(1.1, Math.max(0, (Math.abs(game.ball.position.z - defendGoalZ) - 0.8) * 0.14))
+        ? 0.4 + Math.min(0.72, Math.max(0, (Math.abs(game.ball.position.z - defendGoalZ) - 0.8) * 0.1))
         : game.ball.position.y <= FOOTBALL_BALL_CONTROL_HEIGHT && ballDist < 3.2
-          ? 0.52
+          ? 0.34
           : 0;
-      targetX = THREE.MathUtils.clamp((shotOnGoal ? predictedSaveX * 1.04 : game.ball.position.x * 0.54) + p.roamX * 0.04, -FOOTBALL_GOAL_WIDTH * 0.54, FOOTBALL_GOAL_WIDTH * 0.54);
+      targetX = THREE.MathUtils.clamp((shotOnGoal ? predictedSaveX * 1.02 : game.ball.position.x * 0.42) + p.roamX * 0.03, -FOOTBALL_GOAL_WIDTH * 0.42, FOOTBALL_GOAL_WIDTH * 0.42);
       targetZ = shotOnGoal
         ? keeperLineZ - p.team * keeperRushDepth
-        : defendGoalZ + THREE.MathUtils.clamp((game.ball.position.z - defendGoalZ) * 0.24, -0.36, 1.9);
+        : defendGoalZ + THREE.MathUtils.clamp((game.ball.position.z - defendGoalZ) * 0.16, -0.18, 1.05);
     } else if (tacticalRole === "defender") {
       const laneSign = p.home.x === 0 ? 0 : Math.sign(p.home.x);
       const isCentralDefender = Math.abs(p.home.x) < 0.5;
@@ -5293,6 +5775,12 @@ function updateFootballGame(game, dt) {
       targetZ = Math.max(targetZ * p.team, liftedTargetZ * p.team) * p.team;
     }
 
+    if (p.role !== "keeper" && (p.commitForwardTimer ?? 0) > 0.001) {
+      const commitBlend = THREE.MathUtils.clamp(0.48 + (p.commitForwardTimer ?? 0) * 0.55, 0.48, 0.92);
+      targetX = THREE.MathUtils.lerp(targetX, p.commitTargetX ?? targetX, commitBlend * 0.78);
+      targetZ = THREE.MathUtils.lerp(targetZ, p.commitTargetZ ?? targetZ, commitBlend);
+    }
+
 
     const dirX = targetX - p.runner.root.position.x;
     const dirZ = targetZ - p.runner.root.position.z;
@@ -5308,7 +5796,7 @@ function updateFootballGame(game, dt) {
     const burstPulse = p.burstTimer > 0 ? (p.burstBoost ?? 0) * THREE.MathUtils.clamp(p.burstTimer / 0.85, 0, 1) : 0;
     const runSprintBoost = p.goalRunTimer > 0 ? 0.18 + Math.min(0.16, p.goalRunTimer * 0.12) : 0;
     const speedPulse = THREE.MathUtils.clamp(tempoPulse + burstPulse + runSprintBoost + (isCounterRunner ? 0.06 : 0), 0.78, 1.48);
-    const desiredSpeed = (baseSpeed + burst * p.pressBias + urgencyRunBias) * p.speedBias * speedPulse;
+    const desiredSpeed = (baseSpeed + burst * p.pressBias + urgencyRunBias) * p.speedBias * (p.paceVariance ?? 1) * speedPulse;
     const desiredVx = (dirX / dirLen) * desiredSpeed;
     const desiredVz = (dirZ / dirLen) * desiredSpeed;
 
@@ -5342,12 +5830,12 @@ function updateFootballGame(game, dt) {
     if (p.role === "keeper") {
       const keeperGoalLine = -p.team * (FOOTBALL_FIELD_HALF_LENGTH - 0.9);
       const keeperGoalTravel = (p.runner.root.position.z - keeperGoalLine) * -p.team;
-      const clampedTravel = THREE.MathUtils.clamp(keeperGoalTravel, -0.12, FOOTBALL_GOAL_DEPTH - 0.34);
+      const clampedTravel = THREE.MathUtils.clamp(keeperGoalTravel, -0.06, FOOTBALL_GOAL_DEPTH - 0.92);
       if (Math.abs(clampedTravel - keeperGoalTravel) > 0.0001) {
         p.runner.root.position.z = keeperGoalLine - p.team * clampedTravel;
         p.vz = 0;
       }
-      p.runner.root.position.x = THREE.MathUtils.clamp(p.runner.root.position.x, -FOOTBALL_GOAL_WIDTH * 0.54, FOOTBALL_GOAL_WIDTH * 0.54);
+      p.runner.root.position.x = THREE.MathUtils.clamp(p.runner.root.position.x, -FOOTBALL_GOAL_WIDTH * 0.42, FOOTBALL_GOAL_WIDTH * 0.42);
     }
 
     const moveSpeed = Math.hypot(p.vx, p.vz);
@@ -5357,7 +5845,7 @@ function updateFootballGame(game, dt) {
       const keeperLookX = game.ball.position.x - p.runner.root.position.x;
       const keeperLookZ = game.ball.position.z - p.runner.root.position.z;
       const keeperFacing = Math.atan2(keeperLookX, keeperLookZ);
-      p.runner.root.rotation.y = THREE.MathUtils.lerp(p.runner.root.rotation.y, keeperFacing, THREE.MathUtils.clamp(dt * 7.5, 0, 1));
+      p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, keeperFacing, dt, 8.8);
       const rightX = Math.cos(p.runner.root.rotation.y);
       const rightZ = -Math.sin(p.runner.root.rotation.y);
       const lateralSpeed = p.vx * rightX + p.vz * rightZ;
@@ -5383,7 +5871,11 @@ function updateFootballGame(game, dt) {
       }
       animSpeed = sideStepAmount > 0.02 ? Math.abs(lateralSpeed) * 0.58 : Math.min(moveSpeed, 0.16);
     } else if (moveSpeed > 0.05) {
-      p.runner.root.rotation.y = Math.atan2(p.vx, p.vz);
+      const moveYaw = Math.atan2(p.vx, p.vz);
+      const targetYaw = Math.abs(Math.atan2(Math.sin(moveYaw - p.runner.root.rotation.y), Math.cos(moveYaw - p.runner.root.rotation.y))) > Math.PI * 0.72
+        ? Math.atan2(dirX, dirZ)
+        : moveYaw;
+      p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, targetYaw, dt, 7.2);
     }
     const sprintTarget = THREE.MathUtils.clamp((moveSpeed - (p.role === "keeper" ? 1.28 : 1.62)) / 0.9, 0, 1)
       + (p.goalRunTimer > 0 ? 0.42 : 0)
@@ -5450,6 +5942,7 @@ function updateFootballGame(game, dt) {
       const goalDistance = (attackGoalZ - game.ball.position.z) * p.team;
       const wideCrossZone = Math.abs(game.ball.position.x) > FOOTBALL_GOAL_WIDTH * 0.9 && goalDistance < 5.8;
       const wideServiceZone = Math.abs(game.ball.position.x) > FOOTBALL_GOAL_WIDTH * 0.72 && goalDistance < 8.6;
+      const touchlineIsolation = Math.abs(game.ball.position.x) > FOOTBALL_FIELD_HALF_WIDTH * 0.76;
       const boxTargetsAhead = teammates.filter((mate) =>
         mate !== p
         && mate.role !== "keeper"
@@ -5457,6 +5950,7 @@ function updateFootballGame(game, dt) {
         && mate.runner.root.position.z * p.team > p.runner.root.position.z * p.team - 0.45
         && Math.abs(mate.runner.root.position.x) < FOOTBALL_GOAL_WIDTH * 0.98
       ).length;
+      const crowdedBoxService = touchlineIsolation && boxTargetsAhead >= 2;
       let nearestPressure = 99;
       let shotLanePenalty = 0;
       let shotLaneNudge = 0;
@@ -5527,13 +6021,15 @@ function updateFootballGame(game, dt) {
         || nearestPressure < 1.9
         || (game.ownGoalScrambleTimer ?? 0) > 0.08
       );
+      const passLaneBlocked = Boolean(passOption)
+        && ((passOption.interceptRisk ?? 0) > 0.42 || (passOption.frontBlockerRisk ?? 0) > 0.22 || (passOption.laneTraffic ?? 0) > 0.78);
       const clearanceOption = (escapeMode || hardEscapeMode) ? findClearanceTarget(p, teammates, opponents) : null;
       const shouldClear = clearanceOption && (nearestPressure < 2.35 || game.stallTimer > 1.1 || shotLanePenalty > 0.52 || forceExitOwnGoal);
       const forceWideService = !escapeMode
         && isAttackMinded
         && wideServiceZone
         && boxTargetsAhead > 0
-        && nearestPressure < 3.35;
+        && (nearestPressure < 3.35 || crowdedBoxService);
       const longShotWindow = !escapeMode
         && isAttackMinded
         && finishType === null
@@ -5565,7 +6061,7 @@ function updateFootballGame(game, dt) {
         && !throughRunPass
         && !forceWideService
         && !(passOption && passOption.progressive && passOption.score > 5.2 && passOption.forward > 1.1 && nearestPressure > 0.95);
-      const shouldPass = passOption && (
+      const shouldPass = passOption && !passLaneBlocked && (
         throughRunPass || longPassWindow || (
           !shouldClear
           && !longShotWindow
@@ -5581,6 +6077,7 @@ function updateFootballGame(game, dt) {
               || passOption.forward > (forceDirectPlay ? 1.05 + shotHungerBias * 0.1 : 0.28 + Math.min(0.3, shotHungerBias * 0.08))
               || passOption.targetDepth > FOOTBALL_FIELD_HALF_LENGTH - (5.15 + shotHungerBias * 0.55)
               || passOption.score > FOOTBALL_BEHAVIOR.passScoreBase + finalThirdUrgency * 0.3 + Math.max(0, shotHungerBias - 1.05) * 0.72 + (attackerProfile === "playmaker" ? 1.15 : 0.18) - Math.min(0.38, passOption.dist * FOOTBALL_BEHAVIOR.passScoreDistanceDiscount)
+              || (crowdedBoxService && passOption.forward > 0.42)
               || shotLanePenalty > 1.02 + shotHungerBias * 0.08)
           ))
           && !(forceDirectPlay && recyclePass && !passOption.progressive && passOption.score < 5.85 + shotHungerBias * 0.35 - (attackerProfile === "playmaker" ? 0.5 : 0))
@@ -5612,7 +6109,7 @@ function updateFootballGame(game, dt) {
         : (
           forceVerticalPass
             ? false
-            : ((shouldPass && !discourageBackPass) || (forceWideService && Boolean(passOption) && passOption.forward > 0.55))
+            : ((shouldPass && !discourageBackPass) || (forceWideService && Boolean(passOption) && passOption.forward > 0.42))
         );
       const finalShouldClear = forceExitOwnGoal
         ? !safeEscapePass && Boolean(clearanceOption)
@@ -5705,9 +6202,9 @@ function updateFootballGame(game, dt) {
         const shotLoft = finishType === "volley"
           ? 1.28 + Math.random() * 0.55
           : longShotWindow
-            ? 1.45 + Math.min(1.95, Math.max(0, goalDistance - 6.1) * 0.22) + (highMiss ? 1.05 : 0.28) + (unleashBanger ? 0.34 : 0) + Math.random() * 0.34
+            ? 1.7 + Math.min(2.3, Math.max(0, goalDistance - 6.1) * 0.26) + (highMiss ? 1.45 : 0.34) + (unleashBanger ? 0.42 : 0) + Math.random() * 0.42
             : missesTarget && highMiss
-              ? 1.32 + Math.random() * 0.56
+              ? 1.62 + Math.random() * 0.74
               : 0.18 + Math.max(0, goalDistance - 2.8) * 0.03;
         setFootballBallVelocity(game, aimedFinishDx, finishDz, power, shotLoft);
         if (unleashBanger) {
@@ -5715,6 +6212,12 @@ function updateFootballGame(game, dt) {
         }
         p.kickCooldown = finishType !== null ? 0.42 + Math.random() * 0.1 : 0.68 + Math.random() * 0.24;
         triggerFootballKickPose(p, game.ball, finishType !== null ? 1.08 : 1, finishGoalX);
+        commitFootballRun(
+          p,
+          THREE.MathUtils.clamp(game.ball.position.x + aimedFinishDx * 0.2, -FOOTBALL_FIELD_HALF_WIDTH - FOOTBALL_TOUCHLINE_BUFFER * 0.7, FOOTBALL_FIELD_HALF_WIDTH + FOOTBALL_TOUCHLINE_BUFFER * 0.7),
+          THREE.MathUtils.clamp(p.runner.root.position.z + p.team * (2.8 + Math.min(1.8, goalDistance * 0.12)), -FOOTBALL_FIELD_HALF_LENGTH - FOOTBALL_TOUCHLINE_BUFFER * 0.6, FOOTBALL_FIELD_HALF_LENGTH + FOOTBALL_TOUCHLINE_BUFFER * 0.6),
+          finishType !== null ? 0.64 : 0.48
+        );
         registerBallTouch(game, p.team, p);
         game.deliveryType = null;
         game.deliveryTeam = 0;
