@@ -10,7 +10,7 @@ const JUMP_VELOCITY = 4.65;
 const HUMAN_BASE_Y = -0.55;
 const JUKU_BASE_Y = HUMAN_BASE_Y;
 const RUNNER_BASE_Y = HUMAN_BASE_Y;
-const RUNNER_GROUND_OFFSET = -0.11;
+const RUNNER_GROUND_OFFSET = 0;
 const JUKU_COLLIDER_RADIUS = 0.34;
 const ATHLETE_SCALE = 2.35;
 const FOOTBALL_PERSON_RADIUS = 0.33 * ATHLETE_SCALE;
@@ -56,14 +56,19 @@ const ARCADE_SCORING_BOOST = 1.16;
 const ARCADE_KEEPER_NERF = 0.78;
 const TRACK_RUNNER_COUNT = 5;
 const TRACK_HURDLE_COUNT = 16;
-const TRACK_RUNNER_HURDLE_JUMP_VELOCITY = 3.95;
-const TRACK_RUNNER_HURDLE_CLEARANCE_Y = 0.52;
+const TRACK_RUNNER_HURDLE_JUMP_VELOCITY = 5.2;
+const TRACK_RUNNER_HURDLE_CLEARANCE_Y = 0.9;
 const TRACK_RUNNER_HURDLE_IMPACT_LIFT = 1.6;
-const TRACK_HURDLE_JUMP_TRIGGER = 1.28;
-const TRACK_HURDLE_CONTACT_WINDOW = 0.22;
+const TRACK_HURDLE_JUMP_TRIGGER = 1.9;
+const TRACK_HURDLE_CONTACT_WINDOW = 0.09;
 const TRACK_HURDLE_FALL_SPEED = 4.8;
 const TRACK_HURDLE_RESET_TIME = 5;
-const TRACK_HURDLE_RANDOM_FALL_RATE = 0.009;
+const TRACK_HURDLE_RANDOM_FALL_RATE = 0;
+const TRACK_HURDLE_CONTACT_DEPTH = 0.08;
+const TRACK_HURDLE_CONTACT_SIDE_MARGIN = 0.015;
+const TRACK_HURDLE_CONTACT_HEIGHT_MARGIN = 0.01;
+const TRACK_HURDLE_UNDERPASS_MARGIN = 0.005;
+const TRACK_HURDLE_JUMP_TRIGGER_SPEED_BONUS = 0.36;
 const TRACK_RUNNER_PASS_TRIGGER = 3.1;
 const TRACK_RUNNER_PASS_FRONT_CLEARANCE = 3.8;
 const TRACK_RUNNER_PASS_BACK_CLEARANCE = 1.9;
@@ -548,6 +553,8 @@ const state = {
   replayBuffer: [],
   replaySampleTimer: 0,
   goalReplay: null,
+  pauseFootball: false,
+  pauseTrack: false,
   lastT: performance.now()
 };
 
@@ -565,6 +572,7 @@ cameraRig.position.set(0, 11.2, 0);
 cameraRig.rotation.y = THREE.MathUtils.degToRad(state.cameraYaw);
 
 window.addEventListener("keydown", (event) => {
+  const alreadyPressed = state.keys.has(event.code);
   state.keys.add(event.code);
   if (event.code === "Digit1") setActiveCamera(1);
   if (event.code === "Digit2") setActiveCamera(2);
@@ -576,6 +584,8 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "KeyB") setFaceMode("happy");
   if (event.code === "KeyN") setFaceMode("sad");
   if (event.code === "KeyV") setFaceMode("auto");
+  if (event.code === "KeyF" && !alreadyPressed) state.pauseFootball = !state.pauseFootball;
+  if (event.code === "KeyR" && !alreadyPressed) state.pauseTrack = !state.pauseTrack;
 });
 
 window.addEventListener("keyup", (event) => {
@@ -2247,6 +2257,8 @@ function buildRunner(colors) {
     baseYUnscaled: RUNNER_BASE_Y,
     baseY: RUNNER_BASE_Y,
     groundOffset: RUNNER_GROUND_OFFSET,
+    idleBreathScale: 0.35 + Math.random() * 0.65,
+    idleBreathPhase: Math.random() * Math.PI * 2,
     nativeScale: 1 / ATHLETE_SCALE,
     motionScale: 1,
     runnerStyle: colors.runnerStyle ?? "juku"
@@ -2280,6 +2292,14 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
 
   if (runner.runnerStyle !== "juku") {
     const blend = THREE.MathUtils.clamp(speed / 2.8, 0, 1);
+    const idleLock = blend < 0.035
+      && sprintAmount < 0.05
+      && sideStepAmount < 0.02
+      && keeperSetAmount < 0.02
+      && celebrationAmount < 0.02
+      && keeperDiveAmount < 0.02
+      && kickAmount < 0.02
+      && Math.abs(jumpY) < 0.001;
     const happy = 0.62 + 0.38 * blend;
     const strideBoost = 1 + sprintAmount * 0.35;
     const athleteKneeLift = runner.athleteKneeLift ?? 1;
@@ -2291,7 +2311,7 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
     const diveArc = Math.sin(Math.pow(keeperDiveAmount, 0.84) * Math.PI);
     const diveLift = diveArc * (0.24 + keeperDiveHeight * 0.18) * motionScale;
     const groundedKeeper = (keeperSetAmount > 0.02 || sideStepAmount > 0.02) && keeperDiveAmount <= 0.001;
-    runner.root.position.y = runner.baseY + (runner.groundOffset ?? 0) + (groundedKeeper ? 0 : bounce) + jumpY * motionScale + diveLift - keeperSetAmount * 0.018 * motionScale;
+    runner.root.position.y = runner.baseY + (runner.groundOffset ?? 0) + (groundedKeeper || idleLock ? 0 : bounce) + jumpY * motionScale + diveLift - keeperSetAmount * 0.018 * motionScale;
     runner.torsoPivot.position.x = 0;
     runner.leftLeg.rotation.x = THREE.MathUtils.lerp(swing, sideSwing * 0.28, sideStepAmount);
     runner.rightLeg.rotation.x = THREE.MathUtils.lerp(-swing, -sideSwing * 0.28, sideStepAmount);
@@ -2325,6 +2345,33 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
     runner.torsoPivot.rotation.x = -0.08 - Math.abs(Math.sin(cycle)) * 0.04 * blend - sprintAmount * 0.18;
     runner.head.rotation.x = -0.04 * sprintAmount;
     runner.head.rotation.z = Math.sin(cycle * 0.58) * 0.06 * happy + Math.sin(cycle * 0.24) * 0.03 * sprintAmount;
+    if (idleLock) {
+      const idleBreathScale = runner.idleBreathScale ?? 0;
+      const idleBreathPhase = runner.idleBreathPhase ?? 0;
+      const idleBreathActive = idleBreathScale > 0.52;
+      const idleBreath = idleBreathActive ? Math.sin(cycle * 0.22 + idleBreathPhase) * 0.012 * idleBreathScale : 0;
+      runner.leftLeg.rotation.x = 0;
+      runner.rightLeg.rotation.x = 0;
+      runner.leftLeg.rotation.z = 0;
+      runner.rightLeg.rotation.z = 0;
+      runner.leftArm.rotation.x = -0.08;
+      runner.rightArm.rotation.x = -0.08;
+      runner.leftArm.rotation.y = 0;
+      runner.rightArm.rotation.y = 0;
+      runner.leftArm.rotation.z = THREE.MathUtils.degToRad(7);
+      runner.rightArm.rotation.z = THREE.MathUtils.degToRad(-7);
+      runner.torsoPivot.rotation.z = 0;
+      runner.torsoPivot.rotation.x = -0.08 + idleBreath * 0.45;
+      runner.head.rotation.x = idleBreath * 0.4;
+      runner.head.rotation.z = 0;
+      runner.root.position.y += Math.max(0, idleBreath) * 0.18 * motionScale;
+      if (runner.leftLegRig && runner.rightLegRig) {
+        runner.leftLegRig.kneePivot.rotation.x = THREE.MathUtils.degToRad(11);
+        runner.rightLegRig.kneePivot.rotation.x = THREE.MathUtils.degToRad(11);
+        runner.leftLegRig.footPivot.rotation.x = THREE.MathUtils.degToRad(-8);
+        runner.rightLegRig.footPivot.rotation.x = THREE.MathUtils.degToRad(-8);
+      }
+    }
     if (sideStepAmount > 0) {
       runner.torsoPivot.position.x = sideStepDir * 0.035 * sideStepAmount;
       runner.torsoPivot.rotation.z += sideStepDir * 0.16 * sideStepAmount;
@@ -2333,7 +2380,7 @@ function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = null) {
       runner.leftArm.rotation.x = THREE.MathUtils.lerp(runner.leftArm.rotation.x, -0.55 - sideSwing * 0.18, sideStepAmount);
       runner.rightArm.rotation.x = THREE.MathUtils.lerp(runner.rightArm.rotation.x, -0.12 + sideSwing * 0.18, sideStepAmount);
     }
-    if (runner.smile) runner.smile.rotation.z = Math.sin(cycle * 0.85) * 0.06;
+    if (runner.smile) runner.smile.rotation.z = idleLock ? 0 : Math.sin(cycle * 0.85) * 0.06;
 
     if (specialPose?.type === "keeperDive") {
       const dive = THREE.MathUtils.clamp(specialPose.amount ?? 0, 0, 1);
@@ -2932,7 +2979,22 @@ function buildFootballGame() {
     group.add(hurdle);
     const collider = { type: "obb", x: hurdle.position.x, z: hurdle.position.z, halfX: 0.46 * TRACK_HURDLE_SCALE, halfZ: 0.12 * TRACK_HURDLE_SCALE, yaw: hurdle.rotation.y };
     colliders.push(collider);
-    hurdles.push({ laneIndex: hurdleLane, progress, mesh: hurdle, collider, fallen: false, fallProgress: 0, resetTimer: 0, tipDir: 0, baseY: 0.015, baseHalfX: 0.46 * TRACK_HURDLE_SCALE, baseHalfZ: 0.12 * TRACK_HURDLE_SCALE });
+    hurdles.push({
+      laneIndex: hurdleLane,
+      progress,
+      mesh: hurdle,
+      collider,
+      fallen: false,
+      fallProgress: 0,
+      resetTimer: 0,
+      tipDir: 0,
+      baseY: 0.015,
+      baseHalfX: 0.46 * TRACK_HURDLE_SCALE,
+      baseHalfZ: 0.12 * TRACK_HURDLE_SCALE,
+      barCenterY: 0.015 + 0.335 * TRACK_HURDLE_SCALE,
+      barHalfHeight: 0.0325 * TRACK_HURDLE_SCALE,
+      barHalfWidth: 0.37 * TRACK_HURDLE_SCALE
+    });
   }
 
   return {
@@ -4744,7 +4806,7 @@ function getFootballRefereeTarget(game) {
   return clamped;
 }
 
-function updateFootballGame(game, dt) {
+function updateFootballGame(game, dt, trackDt = dt) {
   game.phase += dt;
   const cameraWorldPos = camera.getWorldPosition(new THREE.Vector3());
   game.firstTouchTimer = Math.max(0, (game.firstTouchTimer ?? 0) - dt);
@@ -4886,18 +4948,57 @@ function updateFootballGame(game, dt) {
     }
   };
 
+  const getRunnerHurdleImpact = (runnerState, hurdle) => {
+    const runner = runnerState.runner;
+    if (!runner?.leftLegRig?.footPivot || !runner?.rightLegRig?.footPivot) return null;
+
+    runner.root.updateWorldMatrix(true, true);
+    hurdle.mesh.updateWorldMatrix(true, false);
+
+    const barTop = (hurdle.barCenterY ?? ((hurdle.baseY ?? 0.015) + 0.335 * TRACK_HURDLE_SCALE))
+      + (hurdle.barHalfHeight ?? (0.0325 * TRACK_HURDLE_SCALE));
+    const barBottom = (hurdle.barCenterY ?? ((hurdle.baseY ?? 0.015) + 0.335 * TRACK_HURDLE_SCALE))
+      - (hurdle.barHalfHeight ?? (0.0325 * TRACK_HURDLE_SCALE));
+    const barHalfWidth = hurdle.barHalfWidth ?? (0.37 * TRACK_HURDLE_SCALE);
+    const impactDepth = Math.max(TRACK_HURDLE_CONTACT_DEPTH, hurdle.baseHalfZ ?? (0.12 * TRACK_HURDLE_SCALE));
+    const leadSide = Math.sin(runnerState.cycle ?? 0) >= 0 ? 1 : -1;
+    const leadLeg = leadSide > 0 ? runner.leftLegRig : runner.rightLegRig;
+    const sampleDefs = [
+      { pivot: leadLeg.footPivot, point: new THREE.Vector3(0, -0.038, 0.24) },
+      { pivot: leadLeg.footPivot, point: new THREE.Vector3(0, -0.02, 0.14) }
+    ];
+
+    let hit = false;
+    let hitSide = 0;
+    for (let i = 0; i < sampleDefs.length; i += 1) {
+      const sample = sampleDefs[i];
+      const worldPoint = sample.pivot.localToWorld(sample.point.clone());
+      const hurdlePoint = hurdle.mesh.worldToLocal(worldPoint.clone());
+      if (Math.abs(hurdlePoint.x) > barHalfWidth + TRACK_HURDLE_CONTACT_SIDE_MARGIN || Math.abs(hurdlePoint.z) > impactDepth) continue;
+      if (worldPoint.y >= barBottom - TRACK_HURDLE_UNDERPASS_MARGIN && worldPoint.y <= barTop + TRACK_HURDLE_CONTACT_HEIGHT_MARGIN) {
+        hit = true;
+        hitSide += hurdlePoint.z;
+      }
+    }
+
+    if (!hit) return null;
+    return {
+      tipDir: hitSide === 0 ? (runnerState.dir > 0 ? -1 : 1) : Math.sign(hitSide)
+    };
+  };
+
   game.hurdles.forEach((hurdle) => {
     if (hurdle.fallen) {
-      hurdle.resetTimer = Math.max(0, (hurdle.resetTimer ?? TRACK_HURDLE_RESET_TIME) - dt);
+      hurdle.resetTimer = Math.max(0, (hurdle.resetTimer ?? TRACK_HURDLE_RESET_TIME) - trackDt);
       if (hurdle.resetTimer <= 0) {
         hurdle.fallen = false;
       }
-    } else if (Math.random() < dt * TRACK_HURDLE_RANDOM_FALL_RATE) {
+    } else if (TRACK_HURDLE_RANDOM_FALL_RATE > 0 && Math.random() < trackDt * TRACK_HURDLE_RANDOM_FALL_RATE) {
       dropHurdle(hurdle, Math.random() < 0.5 ? -1 : 1);
     }
 
     const fallVelocity = hurdle.fallen ? TRACK_HURDLE_FALL_SPEED : -TRACK_HURDLE_FALL_SPEED * 1.2;
-    hurdle.fallProgress = THREE.MathUtils.clamp((hurdle.fallProgress ?? 0) + dt * fallVelocity, 0, 1);
+    hurdle.fallProgress = THREE.MathUtils.clamp((hurdle.fallProgress ?? 0) + trackDt * fallVelocity, 0, 1);
     const easedFall = hurdle.fallProgress > 0 ? 1 - Math.pow(1 - hurdle.fallProgress, 3) : 0;
     hurdle.mesh.rotation.x = hurdle.tipDir * easedFall * THREE.MathUtils.degToRad(84);
     hurdle.mesh.position.y = (hurdle.baseY ?? 0.015) - easedFall * 0.03;
@@ -4972,7 +5073,7 @@ function updateFootballGame(game, dt) {
       }
     }
 
-    runnerState.laneIndex = THREE.MathUtils.damp(currentLane, runnerState.targetLaneIndex ?? 0, TRACK_RUNNER_LANE_CHANGE_RATE, dt);
+    runnerState.laneIndex = THREE.MathUtils.damp(currentLane, runnerState.targetLaneIndex ?? 0, TRACK_RUNNER_LANE_CHANGE_RATE, trackDt);
     if (Math.abs(runnerState.laneIndex - (runnerState.targetLaneIndex ?? 0)) < 0.02) {
       runnerState.laneIndex = runnerState.targetLaneIndex ?? 0;
     }
@@ -4983,13 +5084,13 @@ function updateFootballGame(game, dt) {
     }
 
     const travelLaneLength = getTrackLaneLength(runnerState.laneIndex);
-    runnerState.progress = (runnerState.progress + dir * dt * laneSpeed * 3.35 + travelLaneLength) % travelLaneLength;
+    runnerState.progress = (runnerState.progress + dir * trackDt * laneSpeed * 3.35 + travelLaneLength) % travelLaneLength;
     const point = getTrackPointAtProgress(runnerState.laneIndex, runnerState.progress);
     runnerState.runner.root.position.x = point.x;
     runnerState.runner.root.position.z = point.z;
     runnerState.runner.root.rotation.y = Math.atan2(point.dirX * dir, point.dirZ * dir);
 
-    runnerState.jumpCooldown = Math.max(0, runnerState.jumpCooldown - dt);
+    runnerState.jumpCooldown = Math.max(0, runnerState.jumpCooldown - trackDt);
     let nextHurdle = null;
     let nextHurdleGap = Infinity;
     let contactHurdle = null;
@@ -5008,31 +5109,33 @@ function updateFootballGame(game, dt) {
         contactHurdle = hurdle;
       }
     }
-    if (runnerState.jumpY <= 0.0001 && runnerState.jumpCooldown <= 0 && runnerState.laneIndex < 0.35 && nextHurdle && nextHurdleGap < TRACK_HURDLE_JUMP_TRIGGER) {
+    const hurdleJumpTrigger = TRACK_HURDLE_JUMP_TRIGGER
+      + THREE.MathUtils.clamp(laneSpeed * 0.04, 0, TRACK_HURDLE_JUMP_TRIGGER_SPEED_BONUS);
+    if (runnerState.jumpY <= 0.0001 && runnerState.jumpCooldown <= 0 && runnerState.laneIndex < 0.35 && nextHurdle && nextHurdleGap < hurdleJumpTrigger) {
       runnerState.jumpVel = TRACK_RUNNER_HURDLE_JUMP_VELOCITY + Math.random() * 0.18;
       runnerState.jumpCooldown = 0.72 + Math.random() * 0.14;
     }
 
     if (runnerState.jumpY > 0 || runnerState.jumpVel > 0) {
-      runnerState.jumpVel -= 8.8 * dt;
-      runnerState.jumpY += runnerState.jumpVel * dt;
+      runnerState.jumpVel -= 8.8 * trackDt;
+      runnerState.jumpY += runnerState.jumpVel * trackDt;
       if (runnerState.jumpY <= 0) {
         runnerState.jumpY = 0;
         runnerState.jumpVel = 0;
       }
     }
 
+    runnerState.cycle += trackDt * (5.8 + laneSpeed * 2.35);
+    animateRunner(runnerState.runner, laneSpeed * 0.86, runnerState.cycle, runnerState.jumpY);
+
     if (contactHurdle && contactGap < TRACK_HURDLE_CONTACT_WINDOW) {
-      const clearHeight = runnerState.jumpY + Math.max(0, runnerState.jumpVel) * 0.045;
-      if (clearHeight < TRACK_RUNNER_HURDLE_CLEARANCE_Y) {
-        dropHurdle(contactHurdle, dir > 0 ? -1 : 1);
+      const hurdleImpact = getRunnerHurdleImpact(runnerState, contactHurdle);
+      if (hurdleImpact) {
+        dropHurdle(contactHurdle, hurdleImpact?.tipDir ?? (dir > 0 ? -1 : 1));
         runnerState.jumpVel = Math.max(runnerState.jumpVel, TRACK_RUNNER_HURDLE_IMPACT_LIFT);
         runnerState.jumpCooldown = Math.max(runnerState.jumpCooldown, 0.48);
       }
     }
-
-    runnerState.cycle += dt * (5.8 + laneSpeed * 2.35);
-    animateRunner(runnerState.runner, laneSpeed * 0.86, runnerState.cycle, runnerState.jumpY);
   });
 
   if (updateGoalCelebration(game, dt)) return;
@@ -7747,7 +7850,13 @@ function updateCamera(dt) {
     );
     camera.lookAt(lookX, lookY, lookZ);
   }
-  if (cameraStatus) cameraStatus.textContent = `Active Camera: ${CAMERA_NAMES[state.activeCam]} | Zoom: ${zoom.toFixed(2)}x`;
+  if (cameraStatus) {
+    const pauseFlags = [];
+    if (state.pauseFootball) pauseFlags.push("football paused");
+    if (state.pauseTrack) pauseFlags.push("track paused");
+    const pauseText = pauseFlags.length > 0 ? ` | ${pauseFlags.join(" | ")}` : "";
+    cameraStatus.textContent = `Active Camera: ${CAMERA_NAMES[state.activeCam]} | Zoom: ${zoom.toFixed(2)}x${pauseText}`;
+  }
 }
 
 function updateJukuPose() {
@@ -8024,9 +8133,11 @@ function tick(now) {
   const dt = Math.min((now - state.lastT) / 1000, 0.05);
   state.lastT = now;
   updateJuku(dt);
-  updateFootballGame(footballGame, dt);
-  recordFootballReplay(footballGame, dt);
-  updateGoalReplay(dt, footballGame);
+  updateFootballGame(footballGame, state.pauseFootball ? 0 : dt, state.pauseTrack ? 0 : dt);
+  if (!state.pauseFootball) {
+    recordFootballReplay(footballGame, dt);
+    updateGoalReplay(dt, footballGame);
+  }
   updateCamera(dt);
   updateJukuPose();
   renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
