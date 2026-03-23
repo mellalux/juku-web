@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const packageJsonPath = path.join(rootDir, "package.json");
-const swTemplatePath = path.join(rootDir, "public", "sw.template.js");
+const swTemplatePath = path.join(rootDir, "scripts", "sw.template.js");
 const swOutputPath = path.join(rootDir, "public", "sw.js");
 const versionOutputPath = path.join(rootDir, "public", "version.json");
 

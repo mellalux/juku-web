@@ -58,7 +58,11 @@ npm run preview
 |-- public/
 |   |-- manifest.webmanifest
 |   |-- sw.js
-|   `-- icons/
+|   `-- app-icons/
+|-- scripts/
+|   |-- package-deploy.mjs
+|   |-- sync-pwa-version.mjs
+|   `-- sw.template.js
 |-- src/
 |   |-- main.js
 |   `-- style.css
@@ -68,7 +72,7 @@ npm run preview
 ## PWA Notes
 
 - The app includes a web app manifest at `public/manifest.webmanifest`.
-- The service worker at `public/sw.js` is generated from `public/sw.template.js`.
+- The service worker at `public/sw.js` is generated from `scripts/sw.template.js`.
 - `npm run build` runs `npm run pwa:sync` first, which writes `public/sw.js` and `public/version.json` from the current `package.json` version.
 - The cache name is versioned, so bumping the app version is the intended way to roll PWA caches forward on deploy.
 - PWA install and offline support should be tested on a real HTTPS deployment.
@@ -84,13 +88,13 @@ The page metadata in `index.html` includes:
 Current production URLs are configured for:
 
 - `https://juku.mella.ee/`
-- `https://juku.mella.ee/icons/icon-512.png`
+- `https://juku.mella.ee/app-icons/icon-512.png`
 
 ## Development Notes
 
 - Main game logic lives in `src/main.js`.
 - Styling and touch UI behavior live in `src/style.css`.
-- App icons are generated assets stored in `public/icons/`.
+- App icons are stored in `public/app-icons/`.
 
 ## License
 
@@ -122,7 +126,7 @@ npm run deploy:package
 - `manifest.webmanifest`
 - `sw.js`
 - `version.json`
-- `icons/`
+- `app-icons/`
 - `assets/`
 
 5. Verify these production URLs return `200 OK`:
@@ -130,8 +134,8 @@ npm run deploy:package
 - `https://juku.mella.ee/manifest.webmanifest`
 - `https://juku.mella.ee/sw.js`
 - `https://juku.mella.ee/version.json`
-- `https://juku.mella.ee/icons/icon-192.png`
-- `https://juku.mella.ee/icons/icon-512.png`
+- `https://juku.mella.ee/app-icons/icon-192.png`
+- `https://juku.mella.ee/app-icons/icon-512.png`
 
 6. If testing an updated PWA, unregister the old service worker in DevTools and hard refresh.
 

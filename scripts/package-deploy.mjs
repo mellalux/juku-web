@@ -22,15 +22,15 @@ const deployNotes = {
     "manifest.webmanifest",
     "sw.js",
     "version.json",
-    "icons/",
+    "app-icons/",
     "assets/"
   ],
   productionChecks: [
     "https://juku.mella.ee/manifest.webmanifest",
     "https://juku.mella.ee/sw.js",
     "https://juku.mella.ee/version.json",
-    "https://juku.mella.ee/icons/icon-192.png",
-    "https://juku.mella.ee/icons/icon-512.png"
+    "https://juku.mella.ee/app-icons/icon-192.png",
+    "https://juku.mella.ee/app-icons/icon-512.png"
   ]
 };
 
