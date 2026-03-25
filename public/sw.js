@@ -1,11 +1,13 @@
-const CACHE_NAME = "juku-pwa-v0.1.0";
+const CACHE_NAME = "juku-pwa-v0.1.1";
 const PRECACHE_URLS = [
   "/",
-  "/index.html",
-  "/manifest.webmanifest",
+  "/app-icons/apple-touch-icon.png",
   "/app-icons/icon-192.png",
   "/app-icons/icon-512.png",
-  "/app-icons/apple-touch-icon.png"
+  "/images/Juku.png",
+  "/index.html",
+  "/manifest.webmanifest",
+  "/version.json"
 ];
 
 self.addEventListener("install", (event) => {

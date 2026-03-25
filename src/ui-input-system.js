@@ -52,7 +52,12 @@ export function setupUiInputSystem({
   }
 
   function syncTouchFaceButtons() {
-    if (touchFaceName) touchFaceName.textContent = FACE_NAMES[state.faceMode] || state.faceMode.toUpperCase();
+    if (touchFaceName) {
+      const nextFaceLabel = FACE_NAMES[state.faceMode] || state.faceMode.toUpperCase();
+      if (touchFaceName.textContent !== nextFaceLabel) {
+        touchFaceName.textContent = nextFaceLabel;
+      }
+    }
     if (!touchFaceButtons.length) return;
     for (const button of touchFaceButtons) {
       button.classList.toggle("is-active", button.dataset.face === state.faceMode);
@@ -80,14 +85,23 @@ export function setupUiInputSystem({
   function updateTouchEquipLabel() {
     if (!touchEquipButton) return;
     if (state.swordHeld) {
-      touchEquipButton.textContent = "DROP";
+      if (touchEquipButton.textContent !== "DROP") {
+        touchEquipButton.textContent = "DROP";
+      }
       return;
     }
-    touchEquipButton.textContent = "PICK UP";
+    if (touchEquipButton.textContent !== "PICK UP") {
+      touchEquipButton.textContent = "PICK UP";
+    }
   }
 
   function syncTouchCameraButtons() {
-    if (touchCameraName) touchCameraName.textContent = CAMERA_NAMES[state.activeCam];
+    if (touchCameraName) {
+      const nextCameraLabel = CAMERA_NAMES[state.activeCam];
+      if (touchCameraName.textContent !== nextCameraLabel) {
+        touchCameraName.textContent = nextCameraLabel;
+      }
+    }
     if (!touchCameraButtons.length) return;
     for (const button of touchCameraButtons) {
       button.classList.toggle("is-active", Number(button.dataset.cam) === state.activeCam);

@@ -10,8 +10,13 @@ function getManualChunk(id) {
   if (
     normalizedId.includes("/src/football-ai.js")
     || normalizedId.includes("/src/football-player-runtime.js")
+    || normalizedId.includes("/src/football-player-state-runtime.js")
+    || normalizedId.includes("/src/football-player-targeting-runtime.js")
+    || normalizedId.includes("/src/football-player-movement-runtime.js")
     || normalizedId.includes("/src/football-target-runtime.js")
     || normalizedId.includes("/src/football-touch-runtime.js")
+    || normalizedId.includes("/src/football-touch-decision-runtime.js")
+    || normalizedId.includes("/src/football-touch-execution-runtime.js")
   ) {
     return "football-player";
   }
@@ -21,6 +26,8 @@ function getManualChunk(id) {
     || normalizedId.includes("/src/football-ball-runtime.js")
     || normalizedId.includes("/src/football-flow.js")
     || normalizedId.includes("/src/football-match-runtime.js")
+    || normalizedId.includes("/src/football-match-state-runtime.js")
+    || normalizedId.includes("/src/football-officials-track-runtime.js")
     || normalizedId.includes("/src/football-presentation.js")
     || normalizedId.includes("/src/football-runtime.js")
   ) {

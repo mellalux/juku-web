@@ -7,6 +7,8 @@ import {
   JUKU_BASE_Y
 } from "./game-config.js";
 
+// Camera orchestration for all gameplay modes, including the football broadcast
+// camera and the PiP mirror that shows the standby broadcast angle.
 const FOOTBALL_BROADCAST_CAMERA_LIMIT = 6;
 const FOOTBALL_BROADCAST_POS = new THREE.Vector3();
 const FOOTBALL_BROADCAST_TARGET = new THREE.Vector3();
@@ -36,6 +38,14 @@ const FOOTBALL_BROADCAST_DESIRED_A = { side: 1, x: 0, y: 0, z: 0, lookX: 0, look
 const FOOTBALL_BROADCAST_DESIRED_B = { side: -1, x: 0, y: 0, z: 0, lookX: 0, lookY: 0, lookZ: 0 };
 const FOOTBALL_BROADCAST_SCORE_A = { ballEdge: 9, ballVisible: false, goalVisible: false, score: 0 };
 const FOOTBALL_BROADCAST_SCORE_B = { ballEdge: 9, ballVisible: false, goalVisible: false, score: 0 };
+const FOOTBALL_PIP_LAYOUT = {
+  display: "none",
+  height: 0,
+  left: 0,
+  top: 0,
+  width: 0
+};
+let lastCameraStatusText = "";
 const FOOTBALL_BROADCAST_NEARBY_PLAYERS = Array.from(
   { length: FOOTBALL_BROADCAST_CAMERA_LIMIT },
   () => ({ p: null, dist: Infinity })
@@ -103,10 +113,14 @@ function collectNearestFootballBroadcastPlayers(players, x, z) {
   return FOOTBALL_BROADCAST_NEARBY_PLAYERS;
 }
 
+// Build a weighted snapshot of the football scene. Later camera functions only
+// consume this distilled pack instead of reasoning over the full game state.
 function getFootballBroadcastPack(game) {
   const pack = FOOTBALL_BROADCAST_PACK;
   const kickoffResetActive = (game.refRestart?.active && (game.refRestart.kind ?? "boundary") === "kickoff")
     || (game.celebration?.active && (game.celebration.phase === "reset" || game.celebration.phase === "awaitKickoff"));
+  // Kickoff and referee reset moments should frame the center spot and the two
+  // actors contesting it, rather than following normal live-play priorities.
   if (kickoffResetActive) {
     const centerBallX = game.refRestart?.active ? (game.refRestart.placeX ?? 0) : 0;
     const centerBallZ = game.refRestart?.active ? (game.refRestart.placeZ ?? 0) : 0;
@@ -154,6 +168,8 @@ function getFootballBroadcastPack(game) {
     return pack;
   }
 
+  // Celebrations tighten around the scorer and nearby teammates instead of the
+  // nominal ball location so the shot feels intentional and broadcast-like.
   if (game.celebration?.active && game.celebration.scorer) {
     const celebration = game.celebration;
     const scorer = celebration.scorer;
@@ -209,6 +225,8 @@ function getFootballBroadcastPack(game) {
     return pack;
   }
 
+  // Live play balances three anchors: the ball, the attacking goal, and the
+  // nearest weighted players around the current action.
   const ballX = game.ball.position.x;
   const ballZ = game.ball.position.z;
   let pointCount = 0;
@@ -288,6 +306,8 @@ function getFootballBroadcastPack(game) {
   return pack;
 }
 
+// Generate one sideline camera candidate from the weighted pack.
+// Side selection happens later by scoring the left and right candidates.
 function setFootballBroadcastSetup(out, side, pack, zoom) {
   const wideFieldBias = THREE.MathUtils.clamp((pack.spread - 4.2) / 5.8, 0, 1);
   const dramaBias = THREE.MathUtils.clamp(0.3 + pack.goalRush * 0.55 + pack.boxZoom * 0.22 - pack.midfieldLock * 0.18, 0, 1);
@@ -331,6 +351,8 @@ function dampFootballBroadcastSetup(current, target, dt) {
   return current;
 }
 
+// Score a candidate by keeping the weighted points, especially the ball and
+// goal, inside frame with as little edge clipping as possible.
 function scoreFootballBroadcastSetup(setup, pack, camera, out) {
   const pos = FOOTBALL_BROADCAST_POS.set(setup.x, setup.y, setup.z);
   const target = FOOTBALL_BROADCAST_TARGET.set(setup.lookX, setup.lookY, setup.lookZ);
@@ -398,6 +420,8 @@ export function updateCameraSystem({ dt, state, camera, cameraRig, footballGame,
     camera.lookAt(lookX, lookY, lookZ);
   } else if (state.activeCam === 3) {
     state.cam3SwitchCooldown = Math.max(0, state.cam3SwitchCooldown - dt);
+    // Broadcast mode keeps mirrored left/right candidates alive and only
+    // switches when the standby side is clearly better.
     const pack = getFootballBroadcastPack(footballGame);
     const broadcastZoom = CAMERA_ZOOM_DEFAULTS[3];
     const desiredA = setFootballBroadcastSetup(FOOTBALL_BROADCAST_DESIRED_A, 1, pack, broadcastZoom);
@@ -535,18 +559,28 @@ export function updateCameraSystem({ dt, state, camera, cameraRig, footballGame,
     if (state.pauseFootball) pauseFlags.push("football paused");
     if (state.pauseTrack) pauseFlags.push("track paused");
     const pauseText = pauseFlags.length > 0 ? ` | ${pauseFlags.join(" | ")}` : "";
-    cameraStatus.textContent = `Active Camera: ${CAMERA_NAMES[state.activeCam]} | Zoom: ${zoom.toFixed(2)}x${pauseText}`;
+    const cameraStatusText = `Active Camera: ${CAMERA_NAMES[state.activeCam]} | Zoom: ${zoom.toFixed(2)}x${pauseText}`;
+    if (lastCameraStatusText !== cameraStatusText) {
+      lastCameraStatusText = cameraStatusText;
+      cameraStatus.textContent = cameraStatusText;
+    }
   }
 }
 
 export function renderCamera3PipView({ state, pipFrame, pipCamera, camera, renderer, scene }) {
   if (state.activeCam !== 3) {
-    pipFrame.style.display = "none";
+    if (FOOTBALL_PIP_LAYOUT.display !== "none") {
+      FOOTBALL_PIP_LAYOUT.display = "none";
+      pipFrame.style.display = "none";
+    }
     return;
   }
   const standbySetup = state.cam3Side >= 0 ? state.cam3SetupB : state.cam3SetupA;
   if (!standbySetup) {
-    pipFrame.style.display = "none";
+    if (FOOTBALL_PIP_LAYOUT.display !== "none") {
+      FOOTBALL_PIP_LAYOUT.display = "none";
+      pipFrame.style.display = "none";
+    }
     return;
   }
   const width = Math.max(1, window.innerWidth);
@@ -556,11 +590,27 @@ export function renderCamera3PipView({ state, pipFrame, pipCamera, camera, rende
   const margin = 18;
   const pipX = width - pipWidth - margin;
   const pipY = height - pipHeight - margin;
-  pipFrame.style.display = "block";
-  pipFrame.style.left = `${pipX}px`;
-  pipFrame.style.top = `${height - pipY - pipHeight}px`;
-  pipFrame.style.width = `${pipWidth}px`;
-  pipFrame.style.height = `${pipHeight}px`;
+  const pipTop = height - pipY - pipHeight;
+  if (FOOTBALL_PIP_LAYOUT.display !== "block") {
+    FOOTBALL_PIP_LAYOUT.display = "block";
+    pipFrame.style.display = "block";
+  }
+  if (FOOTBALL_PIP_LAYOUT.left !== pipX) {
+    FOOTBALL_PIP_LAYOUT.left = pipX;
+    pipFrame.style.left = `${pipX}px`;
+  }
+  if (FOOTBALL_PIP_LAYOUT.top !== pipTop) {
+    FOOTBALL_PIP_LAYOUT.top = pipTop;
+    pipFrame.style.top = `${pipTop}px`;
+  }
+  if (FOOTBALL_PIP_LAYOUT.width !== pipWidth) {
+    FOOTBALL_PIP_LAYOUT.width = pipWidth;
+    pipFrame.style.width = `${pipWidth}px`;
+  }
+  if (FOOTBALL_PIP_LAYOUT.height !== pipHeight) {
+    FOOTBALL_PIP_LAYOUT.height = pipHeight;
+    pipFrame.style.height = `${pipHeight}px`;
+  }
   pipCamera.fov = camera.fov;
   pipCamera.aspect = pipWidth / Math.max(1, pipHeight);
   pipCamera.updateProjectionMatrix();

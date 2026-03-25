@@ -6,7 +6,6 @@ export function createUi() {
   const attackStatus = document.querySelector("#attack-status");
   const playerStatus = document.querySelector("#player-status");
   const behaviorModeButtons = Array.from(document.querySelectorAll("[data-behavior]"));
-  const touchActions = document.querySelector("#touch-actions");
   const touchJumpButton = document.querySelector("#touch-jump");
   const touchEquipButton = document.querySelector("#touch-equip");
   const touchZoomInButton = document.querySelector("#touch-zoom-in");
@@ -28,19 +27,6 @@ export function createUi() {
   pipFrame.style.boxShadow = "0 14px 30px rgba(15,23,42,0.28)";
   pipFrame.style.overflow = "hidden";
   pipFrame.style.background = "transparent";
-
-  const pipLabel = document.createElement("div");
-  pipLabel.textContent = "LIVE 2";
-  pipLabel.style.position = "absolute";
-  pipLabel.style.left = "10px";
-  pipLabel.style.top = "10px";
-  pipLabel.style.padding = "4px 8px";
-  pipLabel.style.borderRadius = "999px";
-  pipLabel.style.background = "rgba(15,23,42,0.82)";
-  pipLabel.style.color = "#f8fafc";
-  pipLabel.style.font = "700 11px/1.1 system-ui, sans-serif";
-  pipLabel.style.letterSpacing = "0.12em";
-  pipFrame.appendChild(pipLabel);
   document.body.appendChild(pipFrame);
 
   const goalOverlay = document.createElement("div");
@@ -97,21 +83,6 @@ export function createUi() {
   replayCard.style.border = "2px solid rgba(255,255,255,0.96)";
   replayCard.style.boxShadow = "0 22px 60px rgba(15,23,42,0.4), 0 0 0 1px rgba(255,255,255,0.18) inset";
 
-  const replayCanvas = document.createElement("canvas");
-  replayCanvas.style.width = "100%";
-  replayCanvas.style.height = "100%";
-  replayCanvas.style.display = "block";
-  replayCanvas.style.opacity = "0";
-  replayCard.appendChild(replayCanvas);
-
-  const replayShine = document.createElement("div");
-  replayShine.style.position = "absolute";
-  replayShine.style.inset = "0";
-  replayShine.style.background = "linear-gradient(120deg, rgba(255,255,255,0) 20%, rgba(255,255,255,0.12) 46%, rgba(255,255,255,0) 68%)";
-  replayShine.style.mixBlendMode = "screen";
-  replayShine.style.opacity = "0.42";
-  replayCard.appendChild(replayShine);
-
   const replayBadge = document.createElement("div");
   replayBadge.textContent = "SLOW MO REPLAY";
   replayBadge.style.position = "absolute";
@@ -155,15 +126,11 @@ export function createUi() {
     goalOverlayScorer,
     goalOverlayTitle,
     pipFrame,
-    pipLabel,
     playerStatus,
     replayBadge,
-    replayCanvas,
     replayCard,
     replayFlash,
-    replayShine,
     scoreStatus,
-    touchActions,
     touchCameraButtons,
     touchCameraName,
     touchEquipButton,

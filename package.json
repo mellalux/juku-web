@@ -1,12 +1,12 @@
 {
   "name": "juku-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "pwa:sync": "node ./scripts/sync-pwa-version.mjs",
-    "build": "node ./scripts/sync-pwa-version.mjs && vite build",
+    "build": "node ./scripts/sync-pwa-version.mjs && vite build && node ./scripts/finalize-pwa-build.mjs",
     "preview": "vite preview",
     "deploy:package": "node ./scripts/package-deploy.mjs"
   },

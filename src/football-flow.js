@@ -7,6 +7,10 @@ import {
   GOAL_CELEBRATION_DURATION,
   GOAL_OVERLAY_DURATION
 } from "./game-config.js";
+import {
+  setElementStylePropertyIfChanged,
+  setScoreboardLineView
+} from "./football-presentation.js";
 
 const FOOTBALL_CELEBRATION_CARRY_LOCAL = new THREE.Vector3(0.02, -0.02, 0.12);
 const FOOTBALL_CELEBRATION_CARRY_WORLD = new THREE.Vector3();
@@ -286,14 +290,20 @@ export function startGoalCelebrationFlow(game, scoringTeam, scorer, deps) {
   startGoalReplay(game, scorerPlayer, scoringTeam);
   updateScoreboard(game);
   if (attackStatus) {
-    attackStatus.className = "scoreboard-attack";
-    attackStatus.textContent = "GOAL CELEBRATION";
-    attackStatus.classList.add(scoringTeam === 1 ? "scoreboard-attack-red" : "scoreboard-attack-blue");
+    setScoreboardLineView(
+      attackStatus,
+      "scoreboard-attack",
+      scoringTeam === 1 ? "scoreboard-attack-red" : "scoreboard-attack-blue",
+      "GOAL CELEBRATION"
+    );
   }
   if (playerStatus) {
-    playerStatus.className = "scoreboard-player";
-    playerStatus.textContent = scorerPlayer ? `Scorer: ${getFootballPlayerLabel(scorerPlayer)} | ${formatGoalOrdinal(scorerPlayer.goalsScored ?? 1)} goal` : "Scorer: unknown";
-    playerStatus.classList.add(scoringTeam === 1 ? "scoreboard-player-red" : "scoreboard-player-blue");
+    setScoreboardLineView(
+      playerStatus,
+      "scoreboard-player",
+      scoringTeam === 1 ? "scoreboard-player-red" : "scoreboard-player-blue",
+      scorerPlayer ? `Scorer: ${getFootballPlayerLabel(scorerPlayer)} | ${formatGoalOrdinal(scorerPlayer.goalsScored ?? 1)} goal` : "Scorer: unknown"
+    );
   }
 }
 
@@ -318,15 +328,13 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
   if (!celebration?.active) return false;
 
   if (celebration.phase === "awaitKickoff") {
-    goalOverlay.style.opacity = "0";
-    goalOverlay.style.display = "none";
+    setElementStylePropertyIfChanged(goalOverlay, "opacity", "0");
+    setElementStylePropertyIfChanged(goalOverlay, "display", "none");
     if (attackStatus) {
-      attackStatus.className = "scoreboard-attack";
-      attackStatus.textContent = "REFEREE RESTART";
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "", "REFEREE RESTART");
     }
     if (playerStatus) {
-      playerStatus.className = "scoreboard-player";
-      playerStatus.textContent = "Kickoff: referee bringing ball in";
+      setScoreboardLineView(playerStatus, "scoreboard-player", "", "Kickoff: referee bringing ball in");
     }
     if (!game.refRestart?.active) {
       game.celebration = null;
@@ -413,12 +421,12 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
   if (celebration.phase === "celebrate" && overlayRemaining > 0) {
     const intro = THREE.MathUtils.clamp(elapsed / 0.9, 0, 1);
     const outro = THREE.MathUtils.clamp(overlayRemaining / 0.7, 0, 1);
-    goalOverlay.style.display = "block";
-    goalOverlay.style.opacity = String(Math.min(intro * 1.15, 1) * Math.min(outro * 1.1, 1));
-    goalOverlay.style.transform = `translate(-50%, -50%) scale(${0.82 + intro * 0.24 - (1 - outro) * 0.08})`;
+    setElementStylePropertyIfChanged(goalOverlay, "display", "block");
+    setElementStylePropertyIfChanged(goalOverlay, "opacity", String(Math.min(intro * 1.15, 1) * Math.min(outro * 1.1, 1)));
+    setElementStylePropertyIfChanged(goalOverlay, "transform", `translate(-50%, -50%) scale(${0.82 + intro * 0.24 - (1 - outro) * 0.08})`);
   } else {
-    goalOverlay.style.opacity = "0";
-    goalOverlay.style.display = "none";
+    setElementStylePropertyIfChanged(goalOverlay, "opacity", "0");
+    setElementStylePropertyIfChanged(goalOverlay, "display", "none");
   }
 
   if (celebration.phase === "reset") {
@@ -548,12 +556,15 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
   if (celebration.phase === "celebrate" && celebration.timer <= 0.001) {
     celebration.phase = "replay";
     if (attackStatus) {
-      attackStatus.className = "scoreboard-attack";
-      attackStatus.textContent = "GOAL REPLAY";
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "", "GOAL REPLAY");
     }
     if (playerStatus) {
-      playerStatus.className = "scoreboard-player";
-      playerStatus.textContent = celebration.scorer ? `Replay: ${getFootballPlayerLabel(celebration.scorer)}` : "Replay: slow motion";
+      setScoreboardLineView(
+        playerStatus,
+        "scoreboard-player",
+        "",
+        celebration.scorer ? `Replay: ${getFootballPlayerLabel(celebration.scorer)}` : "Replay: slow motion"
+      );
     }
   }
 
@@ -565,12 +576,10 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
     celebration.refTaskTimer = 0;
     game.kickoffPlacementMode = "reset";
     if (attackStatus) {
-      attackStatus.className = "scoreboard-attack";
-      attackStatus.textContent = "RESETTING SHAPE";
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "", "RESETTING SHAPE");
     }
     if (playerStatus) {
-      playerStatus.className = "scoreboard-player";
-      playerStatus.textContent = "Kickoff: players returning";
+      setScoreboardLineView(playerStatus, "scoreboard-player", "", "Kickoff: players returning");
     }
   }
 

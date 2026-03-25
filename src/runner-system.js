@@ -20,7 +20,13 @@ import {
   getSharedTorusGeometry
 } from "./shared-geometry.js";
 
+const stripedShirtMaterialCache = new Map();
+
 function makeStripedShirtMaterial(base = 0xf7f7f4, stripe = 0x111214) {
+  const cacheKey = `${base}|${stripe}`;
+  const cachedMaterial = stripedShirtMaterialCache.get(cacheKey);
+  if (cachedMaterial) return cachedMaterial;
+
   const canvas = document.createElement("canvas");
   canvas.width = 64;
   canvas.height = 64;
@@ -40,11 +46,13 @@ function makeStripedShirtMaterial(base = 0xf7f7f4, stripe = 0x111214) {
   texture.repeat.set(1, 1);
   texture.needsUpdate = true;
 
-  return new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     map: texture,
     roughness: 0.92
   });
+  stripedShirtMaterialCache.set(cacheKey, material);
+  return material;
 }
 
 export function applyStripedShirtToTorso(torso, base = 0xf7f7f4, stripe = 0x111214) {

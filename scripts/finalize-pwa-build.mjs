@@ -8,11 +8,10 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
+const distDir = path.join(rootDir, "dist");
 const packageJsonPath = path.join(rootDir, "package.json");
 const swTemplatePath = path.join(rootDir, "scripts", "sw.template.js");
-const swOutputPath = path.join(rootDir, "public", "sw.js");
-const versionOutputPath = path.join(rootDir, "public", "version.json");
-const publicDir = path.join(rootDir, "public");
+const swOutputPath = path.join(distDir, "sw.js");
 
 const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
 const version = packageJson.version;
@@ -21,14 +20,11 @@ if (!version) {
   throw new Error("package.json version is missing");
 }
 
-const versionPayload = `${JSON.stringify({ version }, null, 2)}\n`;
-await writeFile(versionOutputPath, versionPayload, "utf8");
-
 const template = await readFile(swTemplatePath, "utf8");
-const precacheUrls = await collectPrecacheUrlsFromDir(publicDir, {
+const precacheUrls = await collectPrecacheUrlsFromDir(distDir, {
   exclude: ["sw.js"]
 });
 const serviceWorker = injectPrecacheUrls(template.replaceAll("__APP_VERSION__", version), precacheUrls);
 await writeFile(swOutputPath, serviceWorker, "utf8");
 
-console.log(`[sync-pwa-version] Prepared PWA assets for version ${version}`);
+console.log(`[finalize-pwa-build] Wrote dist/sw.js with ${precacheUrls.length} precache entries`);

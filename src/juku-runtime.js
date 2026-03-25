@@ -332,7 +332,12 @@ export function updateJukuPoseRuntime({ state, juku, droppedSword, faceStatus })
   juku.tongue.rotation.x = THREE.MathUtils.degToRad(8 + tongueOut * 16 + tongueMotion * tongueNod * 8);
   juku.tongue.rotation.y = tongueMotion * tongueSlide * 0.11;
   juku.tongue.rotation.z = tongueMotion * tongueWave * 0.12;
-  if (faceStatus) faceStatus.textContent = `Active Face: ${FACE_NAMES[state.faceMode]}`;
+  if (faceStatus) {
+    const faceText = `Active Face: ${FACE_NAMES[state.faceMode]}`;
+    if (faceStatus.textContent !== faceText) {
+      faceStatus.textContent = faceText;
+    }
+  }
 
   updateJukuArmPose(juku.leftArm, 1, state, false);
   updateJukuArmPose(juku.rightArm, -1, state, state.swordHeld);

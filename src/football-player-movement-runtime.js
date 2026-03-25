@@ -1,0 +1,188 @@
+import * as THREE from "./three.js";
+import {
+  ATHLETE_BALL_REACH,
+  ARCADE_KEEPER_NERF,
+  ARCADE_SCORING_BOOST,
+  FOOTBALL_BALL_CONTROL_HEIGHT,
+  FOOTBALL_BALL_GRAVITY,
+  FOOTBALL_BALL_GROUND_BOUNCE,
+  FOOTBALL_BALL_RADIUS,
+  FOOTBALL_BALL_VOLLEY_HEIGHT,
+  FOOTBALL_CENTER_CIRCLE_RADIUS,
+  FOOTBALL_FIELD_HALF_LENGTH,
+  FOOTBALL_FIELD_HALF_WIDTH,
+  FOOTBALL_GOAL_DEPTH,
+  FOOTBALL_GOAL_HEIGHT,
+  FOOTBALL_GOAL_WIDTH,
+  FOOTBALL_PERSON_RADIUS,
+  FOOTBALL_TOUCHLINE_BUFFER,
+  TRACK_HURDLE_CONTACT_DEPTH,
+  TRACK_HURDLE_CONTACT_HEIGHT_MARGIN,
+  TRACK_HURDLE_CONTACT_SIDE_MARGIN,
+  TRACK_HURDLE_CONTACT_WINDOW,
+  TRACK_HURDLE_FALL_SPEED,
+  TRACK_HURDLE_JUMP_TRIGGER,
+  TRACK_HURDLE_JUMP_TRIGGER_SPEED_BONUS,
+  TRACK_HURDLE_RANDOM_FALL_RATE,
+  TRACK_HURDLE_RESET_TIME,
+  TRACK_HURDLE_SCALE,
+  TRACK_HURDLE_UNDERPASS_MARGIN,
+  TRACK_RUNNER_HURDLE_IMPACT_LIFT,
+  TRACK_RUNNER_HURDLE_JUMP_VELOCITY,
+  TRACK_RUNNER_LANE_CHANGE_RATE,
+  TRACK_RUNNER_MAX_PASS_LANE,
+  TRACK_RUNNER_PASS_BACK_CLEARANCE,
+  TRACK_RUNNER_PASS_FRONT_CLEARANCE,
+  TRACK_RUNNER_PASS_TRIGGER
+} from "./game-config.js";
+
+export function updateFootballPlayerMovementRuntime(context) {
+  const {
+    FOOTBALL_BEHAVIOR,
+    FOOTBALL_FIELD_HALF_LENGTH,
+    FOOTBALL_GOAL_DEPTH,
+    FOOTBALL_GOAL_WIDTH,
+    FOOTBALL_PERSON_RADIUS,
+    activeBallPlayer,
+    animateRunner,
+    ballDist,
+    clampFootballHumanPosition,
+    dt,
+    game,
+    i,
+    isCounterRunner,
+    isDeliveryTarget,
+    keeperShotOnGoal,
+    p,
+    steerFootballFacing,
+    tacticalRole,
+    targetX,
+    targetZ,
+    urgencyRunBias
+  } = context;
+
+  let currentTargetX = targetX;
+  let currentTargetZ = targetZ;
+
+  if (!Number.isFinite(p.shapeTargetX) || !Number.isFinite(p.shapeTargetZ)) {
+    p.shapeTargetX = currentTargetX;
+    p.shapeTargetZ = currentTargetZ;
+  }
+  const shapeResponse = isDeliveryTarget ? 13.5 : activeBallPlayer === p ? 11.5 : 6.2;
+  p.shapeTargetX = THREE.MathUtils.damp(p.shapeTargetX, currentTargetX, shapeResponse, dt);
+  p.shapeTargetZ = THREE.MathUtils.damp(p.shapeTargetZ, currentTargetZ, shapeResponse, dt);
+  currentTargetX = p.shapeTargetX;
+  currentTargetZ = p.shapeTargetZ;
+
+  const dirX = currentTargetX - p.runner.root.position.x;
+  const dirZ = currentTargetZ - p.runner.root.position.z;
+  const dirLen = Math.max(0.001, Math.hypot(dirX, dirZ));
+  const keeperSpeedBoost = p.role === "keeper"
+    ? (keeperShotOnGoal ? 0.44 : ballDist < 3.6 ? 0.24 : 0)
+    : 0;
+  const baseSpeed = p.role === "keeper" ? 1.72 + (p.saveReach ?? 0) * 0.26 + keeperSpeedBoost : isCounterRunner ? 1.72 : tacticalRole === "supportAttack" ? 1.48 : tacticalRole === "recoverDefence" ? 1.46 : p.role === "defender" ? 1.38 + FOOTBALL_BEHAVIOR.defenderSpeedBonus : 1.56;
+  const burst = isCounterRunner ? 1.08 : (tacticalRole === "attacker" || tacticalRole === "supportAttack") && ballDist < 2.4 ? 1 : ballDist < 2.5 ? 0.72 : 0.2;
+  const tempoPulse = 1
+    + Math.sin(game.phase * (1.2 + (p.tempoRate ?? 1) * 0.45) + (p.tempoPhase ?? 0)) * 0.09 * (p.tempoJitter ?? 1)
+    + Math.sin(game.phase * (2.1 + (p.tempoRate ?? 1) * 0.3) + (p.tempoPhase ?? 0) * 1.7) * 0.04;
+  const burstPulse = p.burstTimer > 0 ? (p.burstBoost ?? 0) * THREE.MathUtils.clamp(p.burstTimer / 0.85, 0, 1) : 0;
+  const runSprintBoost = p.goalRunTimer > 0 ? 0.18 + Math.min(0.16, p.goalRunTimer * 0.12) : 0;
+  const speedPulse = THREE.MathUtils.clamp(tempoPulse + burstPulse + runSprintBoost + (isCounterRunner ? 0.06 : 0), 0.78, 1.48);
+  const desiredSpeed = (baseSpeed + burst * p.pressBias + urgencyRunBias) * p.speedBias * (p.paceVariance ?? 1) * speedPulse;
+  const targetDeadzone = activeBallPlayer === p ? 0.02 : isDeliveryTarget ? 0.08 : 0.18;
+  const desiredVx = dirLen <= targetDeadzone ? 0 : (dirX / dirLen) * desiredSpeed;
+  const desiredVz = dirLen <= targetDeadzone ? 0 : (dirZ / dirLen) * desiredSpeed;
+
+  const movementDamp = p.role === "keeper" ? (keeperShotOnGoal ? 11.5 : 9.6) : 8;
+  p.vx = THREE.MathUtils.damp(p.vx, desiredVx, movementDamp, dt);
+  p.vz = THREE.MathUtils.damp(p.vz, desiredVz, movementDamp, dt);
+
+  for (let j = 0; j < game.players.length; j += 1) {
+    if (i === j) continue;
+    const other = game.players[j];
+    const sx = p.runner.root.position.x - other.runner.root.position.x;
+    const sz = p.runner.root.position.z - other.runner.root.position.z;
+    const sd = Math.hypot(sx, sz);
+    if (sd < FOOTBALL_PERSON_RADIUS * 2.0) {
+      const safeSd = sd > 0.001 ? sd : 1;
+      const sxNorm = sd > 0.001 ? sx / safeSd : Math.cos((i * 1.37 + j * 2.11) % (Math.PI * 2));
+      const szNorm = sd > 0.001 ? sz / safeSd : Math.sin((i * 1.37 + j * 2.11) % (Math.PI * 2));
+      const sameTeam = p.team === other.team ? 1.1 : 0.72;
+      const push = (FOOTBALL_PERSON_RADIUS * 2.0 - Math.min(sd, FOOTBALL_PERSON_RADIUS * 1.98)) * 2.7 * sameTeam;
+      p.vx += sxNorm * push * dt;
+      p.vz += szNorm * push * dt;
+    }
+  }
+
+  p.runner.root.position.x += p.vx * dt;
+  p.runner.root.position.z += p.vz * dt;
+
+  const clampedPlayerPos = clampFootballHumanPosition(p.runner.root.position.x, p.runner.root.position.z);
+  p.runner.root.position.x = clampedPlayerPos.x;
+  p.runner.root.position.z = clampedPlayerPos.z;
+  if (p.role === "keeper") {
+    const keeperGoalLine = -p.team * (FOOTBALL_FIELD_HALF_LENGTH - 0.9);
+    const keeperGoalTravel = (p.runner.root.position.z - keeperGoalLine) * -p.team;
+    const clampedTravel = THREE.MathUtils.clamp(keeperGoalTravel, -0.06, FOOTBALL_GOAL_DEPTH - 0.92);
+    if (Math.abs(clampedTravel - keeperGoalTravel) > 0.0001) {
+      p.runner.root.position.z = keeperGoalLine - p.team * clampedTravel;
+      p.vz = 0;
+    }
+    p.runner.root.position.x = THREE.MathUtils.clamp(p.runner.root.position.x, -FOOTBALL_GOAL_WIDTH * 0.42, FOOTBALL_GOAL_WIDTH * 0.42);
+  }
+
+  const moveSpeed = Math.hypot(p.vx, p.vz);
+  let movementPose = { kickAmount: p.kickBlend ?? 0, kickSide: p.kickSide ?? 1, sprintAmount: p.sprintBlend ?? 0 };
+  let animSpeed = moveSpeed;
+  if (p.role === "keeper" && p.diveBlend <= 0) {
+    const keeperLookX = game.ball.position.x - p.runner.root.position.x;
+    const keeperLookZ = game.ball.position.z - p.runner.root.position.z;
+    const keeperFacing = Math.atan2(keeperLookX, keeperLookZ);
+    p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, keeperFacing, dt, 8.8);
+    const rightX = Math.cos(p.runner.root.rotation.y);
+    const rightZ = -Math.sin(p.runner.root.rotation.y);
+    const lateralSpeed = p.vx * rightX + p.vz * rightZ;
+    const forwardSpeed = p.vx * Math.sin(p.runner.root.rotation.y) + p.vz * Math.cos(p.runner.root.rotation.y);
+    const saveFocus = THREE.MathUtils.clamp((Math.abs(game.ball.position.z - currentTargetZ) - 0.4) / 2.8, 0, 1);
+    const keeperReadyAmount = THREE.MathUtils.clamp(
+      (keeperShotOnGoal ? 0.85 : 0.35 + saveFocus * 0.45) * (1 - THREE.MathUtils.clamp(moveSpeed / 1.35, 0, 1)),
+      0,
+      1
+    );
+    const sideStepAmount = Math.abs(lateralSpeed) > Math.abs(forwardSpeed) + 0.04
+      ? THREE.MathUtils.clamp(Math.abs(lateralSpeed) / 1.05, 0, 1)
+      : 0;
+    movementPose = {
+      ...movementPose,
+      keeperSetAmount: keeperReadyAmount,
+      keeperSetDir: Math.sign((game.ball.position.x - p.runner.root.position.x) || lateralSpeed || 1)
+    };
+    if (sideStepAmount > 0.02) {
+      movementPose.type = "sideStep";
+      movementPose.amount = sideStepAmount;
+      movementPose.dir = Math.sign(lateralSpeed || 1);
+    }
+    animSpeed = sideStepAmount > 0.02 ? Math.abs(lateralSpeed) * 0.58 : Math.min(moveSpeed, 0.16);
+  } else if (moveSpeed > 0.05) {
+    const moveYaw = Math.atan2(p.vx, p.vz);
+    const targetYaw = Math.abs(Math.atan2(Math.sin(moveYaw - p.runner.root.rotation.y), Math.cos(moveYaw - p.runner.root.rotation.y))) > Math.PI * 0.72
+      ? Math.atan2(dirX, dirZ)
+      : moveYaw;
+    p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, targetYaw, dt, 7.2);
+  }
+  const sprintTarget = THREE.MathUtils.clamp((moveSpeed - (p.role === "keeper" ? 1.28 : 1.62)) / 0.9, 0, 1)
+    + (p.goalRunTimer > 0 ? 0.42 : 0)
+    + (p.burstTimer > 0 ? 0.2 : 0);
+  p.sprintBlend = THREE.MathUtils.damp(p.sprintBlend ?? 0, THREE.MathUtils.clamp(sprintTarget, 0, 1), 6.5, dt);
+  movementPose.sprintAmount = p.role === "keeper" ? 0 : (p.sprintBlend ?? 0);
+  p.cycle += dt * (4.8 + moveSpeed * 2.8) * (p.strideRate ?? 1);
+  animateRunner(
+    p.runner,
+    animSpeed,
+    p.cycle,
+    p.role === "keeper" && p.diveBlend > 0.04 ? p.saveLift : 0,
+    p.role === "keeper" && p.diveBlend > 0
+      ? { type: "keeperDive", amount: p.diveBlend, dir: p.diveDir, saveHeight: p.saveHeight ?? 0.45, kickAmount: p.kickBlend ?? 0, kickSide: p.kickSide ?? 1, sprintAmount: 0 }
+      : movementPose
+  );
+}

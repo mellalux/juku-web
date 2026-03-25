@@ -12,6 +12,7 @@ import {
 } from "./football-presentation.js";
 import { getFootballPlayerLabel } from "./football-helpers.js";
 
+let lastReplayBadgeText = "";
 const REPLAY_SAVED_BALL = {
   visible: true,
   x: 0,
@@ -32,7 +33,11 @@ export function renderGoalReplay3DView({
 }) {
   const replay = state.goalReplay;
   if (!replay?.visible) return;
-  replayBadge.textContent = replay.scorer ? `SLOW MO | ${getFootballPlayerLabel(replay.scorer)}` : "SLOW MO REPLAY";
+  const replayBadgeText = replay.scorer ? `SLOW MO | ${getFootballPlayerLabel(replay.scorer)}` : "SLOW MO REPLAY";
+  if (lastReplayBadgeText !== replayBadgeText) {
+    lastReplayBadgeText = replayBadgeText;
+    replayBadge.textContent = replayBadgeText;
+  }
   const frame = getGoalReplayFrame(replay, getGoalReplayPlaybackTime(replay));
   if (!frame) return;
 

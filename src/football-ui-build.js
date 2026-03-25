@@ -1,9 +1,14 @@
 import * as THREE from "./three.js";
 import { getSharedPlaneGeometry } from "./shared-geometry.js";
 
+const nameTagTextureCache = new Map();
 const numberPatchMaterialCache = new Map();
 
-export function makeFootballNameTag(text, backgroundColor, textColor = "#111827") {
+function getFootballNameTagTexture(text, backgroundColor, textColor) {
+  const cacheKey = `${text}|${backgroundColor}|${textColor}`;
+  let texture = nameTagTextureCache.get(cacheKey);
+  if (texture) return texture;
+
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 128;
@@ -38,8 +43,14 @@ export function makeFootballNameTag(text, backgroundColor, textColor = "#111827"
   ctx.textBaseline = "middle";
   ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
 
-  const texture = new THREE.CanvasTexture(canvas);
+  texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
+  nameTagTextureCache.set(cacheKey, texture);
+  return texture;
+}
+
+export function makeFootballNameTag(text, backgroundColor, textColor = "#111827") {
+  const texture = getFootballNameTagTexture(text, backgroundColor, textColor);
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.94, depthWrite: false }));
   sprite.scale.set(1.18, 0.31, 1);
   sprite.renderOrder = 4;

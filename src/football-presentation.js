@@ -23,6 +23,9 @@ const GOAL_REPLAY_CAMERA_SETUP = {
   y: 0,
   z: 0
 };
+const GOAL_OVERLAY_HIDDEN_TRANSFORM = "translate(-50%, -50%) scale(0.82)";
+const GOAL_REPLAY_HIDDEN_TRANSFORM = "translate(-50%, -50%) perspective(1400px) rotateY(-96deg) scale(0.86)";
+const GOAL_REPLAY_RESTING_BOX_SHADOW = "0 22px 60px rgba(15,23,42,0.4), 0 0 0 1px rgba(255,255,255,0.18) inset";
 const GOAL_REPLAY_BUFFER_FRAME_CAPACITY = Math.max(
   8,
   Math.ceil((GOAL_REPLAY_BUFFER_SECONDS + 0.25) / GOAL_REPLAY_SAMPLE_INTERVAL) + 2
@@ -80,37 +83,61 @@ function getRecentFootballReplayFrames(state, maxFrames) {
   return frames;
 }
 
+export function setElementTextIfChanged(element, text) {
+  if (element && element.textContent !== text) element.textContent = text;
+}
+
+export function setElementClassNameIfChanged(element, className) {
+  if (element && element.className !== className) element.className = className;
+}
+
+export function setElementStylePropertyIfChanged(element, propertyName, value) {
+  if (!element || element.style[propertyName] === value) return;
+  element.style[propertyName] = value;
+}
+
+export function setScoreboardLineView(element, baseClassName, themeClassName, text) {
+  if (!element) return;
+  const className = themeClassName ? `${baseClassName} ${themeClassName}` : baseClassName;
+  setElementClassNameIfChanged(element, className);
+  setElementTextIfChanged(element, text);
+}
+
 export function updateScoreboardView({ game, scoreStatus, attackStatus, playerStatus, getFootballPlayerLabel }) {
   if (playerStatus && game.refRestart?.active && (game.refRestart.kind ?? "boundary") === "kickoff") {
-    playerStatus.className = "scoreboard-player";
-    playerStatus.textContent = game.refRestart.phase === "toBall"
-      ? "Referee: retrieving kickoff ball"
-      : game.refRestart.phase === "toCenter"
-        ? "Referee: bringing ball to center"
-        : "Referee: placing kickoff ball";
+    setScoreboardLineView(
+      playerStatus,
+      "scoreboard-player",
+      "",
+      game.refRestart.phase === "toBall"
+        ? "Referee: retrieving kickoff ball"
+        : game.refRestart.phase === "toCenter"
+          ? "Referee: bringing ball to center"
+          : "Referee: placing kickoff ball"
+    );
     return;
   }
   if (scoreStatus) {
-    scoreStatus.textContent = `${game.redScore} : ${game.blueScore}`;
-    attackStatus.className = "scoreboard-attack";
+    setElementTextIfChanged(scoreStatus, `${game.redScore} : ${game.blueScore}`);
     if (game.attackingTeam === 1) {
-      attackStatus.textContent = `${TEAM_DISPLAY_NAMES.red} attacks`;
-      attackStatus.classList.add("scoreboard-attack-red");
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "scoreboard-attack-red", `${TEAM_DISPLAY_NAMES.red} attacks`);
     } else if (game.attackingTeam === -1) {
-      attackStatus.textContent = `${TEAM_DISPLAY_NAMES.blue} attacks`;
-      attackStatus.classList.add("scoreboard-attack-blue");
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "scoreboard-attack-blue", `${TEAM_DISPLAY_NAMES.blue} attacks`);
     } else {
-      attackStatus.textContent = "Attack: loose ball";
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "", "Attack: loose ball");
     }
   }
   if (!playerStatus) return;
 
-  playerStatus.className = "scoreboard-player";
   if (game.ballHolder) {
-    playerStatus.textContent = `Ball: ${getFootballPlayerLabel(game.ballHolder)}`;
-    playerStatus.classList.add(game.ballHolder.team === 1 ? "scoreboard-player-red" : "scoreboard-player-blue");
+    setScoreboardLineView(
+      playerStatus,
+      "scoreboard-player",
+      game.ballHolder.team === 1 ? "scoreboard-player-red" : "scoreboard-player-blue",
+      `Ball: ${getFootballPlayerLabel(game.ballHolder)}`
+    );
   } else {
-    playerStatus.textContent = "Ball: loose";
+    setScoreboardLineView(playerStatus, "scoreboard-player", "", "Ball: loose");
   }
 }
 
@@ -160,16 +187,19 @@ export function formatGoalOrdinal(count) {
 
 export function setGoalOverlayStateView({ active, scorer = null, team = 0, goalOverlay, goalOverlayTitle, goalOverlayScorer }) {
   if (!active) {
-    goalOverlay.style.display = "none";
-    goalOverlay.style.opacity = "0";
-    goalOverlay.style.transform = "translate(-50%, -50%) scale(0.82)";
+    setElementStylePropertyIfChanged(goalOverlay, "display", "none");
+    setElementStylePropertyIfChanged(goalOverlay, "opacity", "0");
+    setElementStylePropertyIfChanged(goalOverlay, "transform", GOAL_OVERLAY_HIDDEN_TRANSFORM);
     return;
   }
-  goalOverlay.style.display = "block";
-  goalOverlayTitle.textContent = "GOAL";
-  goalOverlayTitle.style.color = team === 1 ? "#fecaca" : team === -1 ? "#bfdbfe" : "#f8fafc";
-  goalOverlayScorer.textContent = scorer ? `${scorer.shirtNumber} - ${scorer.displayName} | ${formatGoalOrdinal(scorer.goalsScored ?? 1)} goal` : "SCORER UNKNOWN";
-  goalOverlayScorer.style.color = team === 1 ? "#fca5a5" : team === -1 ? "#93c5fd" : "#dbeafe";
+  setElementStylePropertyIfChanged(goalOverlay, "display", "block");
+  setElementTextIfChanged(goalOverlayTitle, "GOAL");
+  setElementStylePropertyIfChanged(goalOverlayTitle, "color", team === 1 ? "#fecaca" : team === -1 ? "#bfdbfe" : "#f8fafc");
+  setElementTextIfChanged(
+    goalOverlayScorer,
+    scorer ? `${scorer.shirtNumber} - ${scorer.displayName} | ${formatGoalOrdinal(scorer.goalsScored ?? 1)} goal` : "SCORER UNKNOWN"
+  );
+  setElementStylePropertyIfChanged(goalOverlayScorer, "color", team === 1 ? "#fca5a5" : team === -1 ? "#93c5fd" : "#dbeafe");
 }
 
 function captureFootballReplayFrame(game, replayClock) {
@@ -314,17 +344,18 @@ export function updateGoalReplayState({ dt, state, game = null, replayCard, repl
   const replay = state.goalReplay;
   const replayPhaseActive = game?.celebration?.phase === "replay";
   if (!replay) {
-    replayCard.style.display = "none";
-    replayCard.style.opacity = "0";
-    replayCard.style.transform = "translate(-50%, -50%) perspective(1400px) rotateY(-96deg) scale(0.86)";
-    replayFlash.style.opacity = "0";
+    setElementStylePropertyIfChanged(replayCard, "display", "none");
+    setElementStylePropertyIfChanged(replayCard, "opacity", "0");
+    setElementStylePropertyIfChanged(replayCard, "transform", GOAL_REPLAY_HIDDEN_TRANSFORM);
+    setElementStylePropertyIfChanged(replayCard, "boxShadow", GOAL_REPLAY_RESTING_BOX_SHADOW);
+    setElementStylePropertyIfChanged(replayFlash, "opacity", "0");
     return;
   }
   if (!replayPhaseActive) {
     replay.visible = false;
-    replayCard.style.display = "none";
-    replayCard.style.opacity = "0";
-    replayFlash.style.opacity = "0";
+    setElementStylePropertyIfChanged(replayCard, "display", "none");
+    setElementStylePropertyIfChanged(replayCard, "opacity", "0");
+    setElementStylePropertyIfChanged(replayFlash, "opacity", "0");
     return;
   }
   replay.timer += dt;
@@ -335,8 +366,8 @@ export function updateGoalReplayState({ dt, state, game = null, replayCard, repl
     replay.visible = false;
   } else {
     replay.visible = true;
-    replayCard.style.display = "block";
-    replayCard.style.opacity = String(Math.min(intro, outro));
+    setElementStylePropertyIfChanged(replayCard, "display", "block");
+    setElementStylePropertyIfChanged(replayCard, "opacity", String(Math.min(intro, outro)));
     const easedIntro = 1 - Math.pow(1 - intro, 2.2);
     const easedOutro = 1 - Math.pow(1 - outro, 1.6);
     const settlePulse = Math.sin(easedIntro * Math.PI) * Math.max(0, 1 - easedIntro) * 14;
@@ -344,18 +375,26 @@ export function updateGoalReplayState({ dt, state, game = null, replayCard, repl
     const shadowLift = 22 + easedIntro * 14 + Math.max(0, depthPulse) * 0.9;
     const shadowBlur = 60 + easedIntro * 18 + Math.abs(depthPulse) * 1.1;
     const insetGlow = 0.18 + easedIntro * 0.08 + Math.max(0, depthPulse) * 0.002;
-    replayCard.style.transform = `translate(-50%, -50%) perspective(1400px) rotateY(${(-108 + easedIntro * 112 + settlePulse + (1 - easedOutro) * 20).toFixed(2)}deg) scale(${(0.79 + easedIntro * 0.21 + Math.max(0, 0.025 - Math.abs(settlePulse) * 0.0007) - (1 - easedOutro) * 0.06).toFixed(3)})`;
-    replayCard.style.boxShadow = `0 ${shadowLift.toFixed(1)}px ${shadowBlur.toFixed(1)}px rgba(15,23,42,${(0.38 + easedIntro * 0.12).toFixed(3)}), 0 0 0 1px rgba(255,255,255,${insetGlow.toFixed(3)}) inset`;
+    setElementStylePropertyIfChanged(
+      replayCard,
+      "transform",
+      `translate(-50%, -50%) perspective(1400px) rotateY(${(-108 + easedIntro * 112 + settlePulse + (1 - easedOutro) * 20).toFixed(2)}deg) scale(${(0.79 + easedIntro * 0.21 + Math.max(0, 0.025 - Math.abs(settlePulse) * 0.0007) - (1 - easedOutro) * 0.06).toFixed(3)})`
+    );
+    setElementStylePropertyIfChanged(
+      replayCard,
+      "boxShadow",
+      `0 ${shadowLift.toFixed(1)}px ${shadowBlur.toFixed(1)}px rgba(15,23,42,${(0.38 + easedIntro * 0.12).toFixed(3)}), 0 0 0 1px rgba(255,255,255,${insetGlow.toFixed(3)}) inset`
+    );
     const flash = THREE.MathUtils.clamp(1 - Math.max(0, replay.timer - GOAL_REPLAY_DELAY) / 0.48, 0, 1);
-    replayFlash.style.opacity = String(flash);
-    replayFlash.style.transform = `translate(-50%, -50%) scale(${(0.84 + (1 - flash) * 0.2).toFixed(3)})`;
+    setElementStylePropertyIfChanged(replayFlash, "opacity", String(flash));
+    setElementStylePropertyIfChanged(replayFlash, "transform", `translate(-50%, -50%) scale(${(0.84 + (1 - flash) * 0.2).toFixed(3)})`);
   }
   if (!replay.visible) {
-    replayCard.style.opacity = "0";
-    replayCard.style.boxShadow = "0 22px 60px rgba(15,23,42,0.4), 0 0 0 1px rgba(255,255,255,0.18) inset";
-    replayFlash.style.opacity = "0";
+    setElementStylePropertyIfChanged(replayCard, "opacity", "0");
+    setElementStylePropertyIfChanged(replayCard, "boxShadow", GOAL_REPLAY_RESTING_BOX_SHADOW);
+    setElementStylePropertyIfChanged(replayFlash, "opacity", "0");
     if (replay.timer >= showDuration) {
-      replayCard.style.display = "none";
+      setElementStylePropertyIfChanged(replayCard, "display", "none");
       state.goalReplay = null;
     }
   }
