@@ -1,6 +1,7 @@
 import { updateFootballPlayerRuntime } from "./football-player-runtime.js";
 import {
   updateFootballBallRuntime,
+  updateFootballLateGoalCheckRuntime,
   updateFootballPossessionRuntime
 } from "./football-ball-runtime.js";
 import { updateFootballOfficialsAndTrackRuntime } from "./football-officials-track-runtime.js";
@@ -39,6 +40,11 @@ export function updateFootballGameplayRuntime(game, dt, trackDt, context) {
     updateGoalCelebration,
     updateScoreboard
   } = context;
+  const frameStartBallState = {
+    x: game.ball.position.x,
+    y: game.ball.position.y,
+    z: game.ball.position.z
+  };
 
   updateFootballTransientTimersRuntime(game, dt);
   updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, {
@@ -72,7 +78,16 @@ export function updateFootballGameplayRuntime(game, dt, trackDt, context) {
     setFootballBallVelocity,
     triggerFootballKickPose
   });
-  updateFootballOutOfBoundsRuntime(game, dt, ballRuntime.kickoffLocked, startFootballRefRestart);
+  if (updateFootballLateGoalCheckRuntime(game, {
+    prevBallState: frameStartBallState,
+    startGoalCelebration,
+    updateScoreboard
+  })) return;
+  const refRestartBlocking = Boolean(game.refRestart?.active && game.refRestart.phase !== "clear");
+  const playStopped = ballRuntime.kickoffLocked
+    || ballRuntime.ballOutsideField
+    || (game.restartHoldTimer ?? 0) > 0.001
+    || refRestartBlocking;
 
   const {
     activeBallPlayer,
@@ -80,7 +95,7 @@ export function updateFootballGameplayRuntime(game, dt, trackDt, context) {
     closestToBall,
     controllingTeam,
     teamPlayers
-  } = updateFootballPossessionRuntime(game, dt, ballRuntime.kickoffLocked, {
+  } = updateFootballPossessionRuntime(game, dt, playStopped, {
     applyFootballKickContact,
     getFootballFootedness,
     registerBallTouch,
@@ -121,7 +136,7 @@ export function updateFootballGameplayRuntime(game, dt, trackDt, context) {
       game,
       getFootballFootedness,
       getFootballKickoffTarget,
-      kickoffLocked: ballRuntime.kickoffLocked,
+      kickoffLocked: playStopped,
       ownGoalDepth,
       p: game.players[i],
       playerIndex: i,
@@ -133,5 +148,11 @@ export function updateFootballGameplayRuntime(game, dt, trackDt, context) {
     });
   }
 
-  resolvePeopleCollisions(game);
+  resolvePeopleCollisions(game, dt);
+  if (updateFootballLateGoalCheckRuntime(game, {
+    prevBallState: frameStartBallState,
+    startGoalCelebration,
+    updateScoreboard
+  })) return;
+  updateFootballOutOfBoundsRuntime(game, dt, ballRuntime.kickoffLocked, startFootballRefRestart);
 }

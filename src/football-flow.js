@@ -123,6 +123,8 @@ export function resetFootballKickoffFlow(game, snapPlayers = true, clearCelebrat
   game.restartHoldTimer = 0;
   game.kickoffContestTimer = 0;
   game.kickoffScriptTimer = 0;
+  game.kickoffReleaseTimer = 0;
+  game.kickoffReceiver = null;
   if (game.coach) {
     game.coach.lastBallHolder = null;
     game.coach.lastControllingTeam = 0;
@@ -176,6 +178,9 @@ export function resetFootballKickoffFlow(game, snapPlayers = true, clearCelebrat
     let kickoffTaker = null;
     let kickoffTakerCenterDist = Infinity;
     let kickoffTakerForwardBias = Infinity;
+    let kickoffSupport = null;
+    let kickoffSupportCenterDist = Infinity;
+    let kickoffSupportForwardBias = Infinity;
     let kickoffPresser = null;
     let kickoffPresserCenterDist = Infinity;
     let kickoffPresserForwardBias = Infinity;
@@ -198,13 +203,45 @@ export function resetFootballKickoffFlow(game, snapPlayers = true, clearCelebrat
         kickoffPresserForwardBias = forwardBias;
       }
     }
+    for (let i = 0; i < game.players.length; i += 1) {
+      const player = game.players[i];
+      if (player.team !== kickoffTeam || player.role === "keeper" || player === kickoffTaker) continue;
+      const targetX = player.kickoffTargetX ?? player.runner.root.position.x;
+      const targetZ = player.kickoffTargetZ ?? player.runner.root.position.z;
+      const centerDist = Math.hypot(targetX, targetZ);
+      const forwardBias = Math.abs(targetZ);
+      if (isBetterFootballKickoffCandidate(centerDist, forwardBias, kickoffSupportCenterDist, kickoffSupportForwardBias)) {
+        kickoffSupport = player;
+        kickoffSupportCenterDist = centerDist;
+        kickoffSupportForwardBias = forwardBias;
+      }
+    }
     if (kickoffTaker) {
       kickoffTaker.kickoffRole = "taker";
       kickoffTaker.kickoffRank = 0;
     }
+    if (kickoffSupport) {
+      kickoffSupport.kickoffRole = "support";
+      kickoffSupport.kickoffRank = 1;
+    }
     if (kickoffPresser) {
       kickoffPresser.kickoffRole = "press";
       kickoffPresser.kickoffRank = 0;
+    }
+    for (let i = 0; i < game.players.length; i += 1) {
+      const player = game.players[i];
+      const kickoffTarget = getFootballKickoffTarget(game, player);
+      player.kickoffTargetX = kickoffTarget.x;
+      player.kickoffTargetZ = kickoffTarget.z;
+      player.commitTargetX = kickoffTarget.x;
+      player.commitTargetZ = kickoffTarget.z;
+      player.shapeTargetX = kickoffTarget.x;
+      player.shapeTargetZ = kickoffTarget.z;
+      if (snapPlayers) {
+        player.runner.root.position.x = kickoffTarget.x;
+        player.runner.root.position.z = kickoffTarget.z;
+        player.runner.root.rotation.y = kickoffTarget.yaw;
+      }
     }
   }
   if (kickoffTeam !== 0) {

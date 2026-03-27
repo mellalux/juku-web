@@ -251,6 +251,12 @@ export function updateFootballGoalmouthStallRuntime(game, dt, deps) {
   } = deps;
 
   const nearestGoalSide = Math.abs(game.ball.position.z) > FOOTBALL_FIELD_HALF_LENGTH * 0.35 ? Math.sign(game.ball.position.z || 1) : 0;
+  const ballOutsideField = Math.abs(game.ball.position.x) > FOOTBALL_FIELD_HALF_WIDTH
+    || Math.abs(game.ball.position.z) > FOOTBALL_FIELD_HALF_LENGTH;
+  if (ballOutsideField || game.goalPending || game.refRestart?.active) {
+    game.goalmouthStallTimer = Math.max(0, (game.goalmouthStallTimer ?? 0) - dt * 4.5);
+    return;
+  }
   const nearestGoalZ = nearestGoalSide * (FOOTBALL_FIELD_HALF_LENGTH - 0.9);
   const goalPostPocketOffset = Math.abs(Math.abs(game.ball.position.x) - FOOTBALL_GOAL_WIDTH * 0.5);
   const inGoalmouthStallZone = nearestGoalSide !== 0
@@ -323,8 +329,8 @@ export function updateFootballGoalmouthStallRuntime(game, dt, deps) {
   game.goalmouthStallTimer = 0;
 }
 
-// Give borderline bounces a moment to come back into play before starting a
-// referee restart, but whistle quickly once the ball is clearly dead.
+// Allow barely-grazing bounces to recover inside the line, but whistle as soon
+// as the ball is clearly out beyond the field boundary.
 export function updateFootballOutOfBoundsRuntime(game, dt, kickoffLocked, startFootballRefRestart) {
   const ballOutsideField = !kickoffLocked
     && !game.goalPending
@@ -338,12 +344,11 @@ export function updateFootballOutOfBoundsRuntime(game, dt, kickoffLocked, startF
   } else {
     game.outOfBoundsTimer = Math.max(0, (game.outOfBoundsTimer ?? 0) - dt * 3.5);
   }
-  const ballClearlyOut = Math.abs(game.ball.position.x) > FOOTBALL_FIELD_HALF_WIDTH + 0.12
-    || Math.abs(game.ball.position.z) > FOOTBALL_FIELD_HALF_LENGTH + 0.12;
-  const deadBallOutOfPlay = ballOutsideField
-    && game.ball.position.y <= FOOTBALL_BALL_RADIUS + 0.08
-    && game.ballVel.length() < 0.42;
-  if (ballOutsideField && ballClearlyOut && (deadBallOutOfPlay || (game.outOfBoundsTimer ?? 0) > 1.1)) {
+  const outsideByX = Math.max(0, Math.abs(game.ball.position.x) - FOOTBALL_FIELD_HALF_WIDTH);
+  const outsideByZ = Math.max(0, Math.abs(game.ball.position.z) - FOOTBALL_FIELD_HALF_LENGTH);
+  const ballClearlyOut = outsideByX > 0.05 || outsideByZ > 0.05;
+  const ballPersistentlyOut = (game.outOfBoundsTimer ?? 0) > 0.08;
+  if (ballOutsideField && (ballClearlyOut || ballPersistentlyOut)) {
     startFootballRefRestart(game, game.ball.position.x, game.ball.position.z);
   }
 }

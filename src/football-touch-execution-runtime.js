@@ -50,31 +50,31 @@ export function handleFootballControlStateRuntime(context) {
 
   const contestControlActive = (game.contestTouchTimer ?? 0) > 0.001
     && p.role !== "keeper"
-    && nearestOpponentPressure < 1.72;
+    && nearestOpponentPressure < 1.92;
   const contestHardLockActive = (game.contestHardLockTimer ?? 0) > 0.001
     && p.role !== "keeper"
-    && nearestOpponentPressure < 1.95;
+    && nearestOpponentPressure < 2.18;
   const duelControlActive = game.duelControlPlayer === p
     && (game.duelControlTimer ?? 0) > 0.001
-    && nearestOpponentPressure < 1.38;
+    && nearestOpponentPressure < 1.56;
   const firstTouchControl = game.firstTouchPlayer === p && (game.firstTouchTimer ?? 0) > 0.001;
 
   if (!(firstTouchControl || duelControlActive || contestControlActive || contestHardLockActive)) {
     return false;
   }
 
-  const settleDistance = contestHardLockActive ? 0.12 : duelControlActive ? 0.16 : contestControlActive ? 0.14 : 0.2;
-  const settleLerp = contestHardLockActive ? 0.7 : duelControlActive ? 0.6 : contestControlActive ? 0.64 : 0.48;
-  const velocityDamp = contestHardLockActive ? 0.08 : duelControlActive ? 0.2 : contestControlActive ? 0.14 : 0.32;
+  const settleDistance = contestHardLockActive ? 0.09 : duelControlActive ? 0.12 : contestControlActive ? 0.11 : 0.16;
+  const settleLerp = contestHardLockActive ? 0.78 : duelControlActive ? 0.7 : contestControlActive ? 0.74 : 0.56;
+  const velocityDamp = contestHardLockActive ? 0.05 : duelControlActive ? 0.14 : contestControlActive ? 0.1 : 0.24;
   const settleX = p.runner.root.position.x + Math.sin(p.runner.root.rotation.y) * settleDistance;
   const settleZ = p.runner.root.position.z + Math.cos(p.runner.root.rotation.y) * settleDistance;
   game.ball.position.x = THREE.MathUtils.lerp(game.ball.position.x, settleX, settleLerp);
   game.ball.position.z = THREE.MathUtils.lerp(game.ball.position.z, settleZ, settleLerp);
-  game.ball.position.y = Math.max(FOOTBALL_BALL_RADIUS, THREE.MathUtils.lerp(game.ball.position.y, FOOTBALL_BALL_RADIUS, duelControlActive || contestControlActive || contestHardLockActive ? 0.76 : 0.62));
+  game.ball.position.y = Math.max(FOOTBALL_BALL_RADIUS, THREE.MathUtils.lerp(game.ball.position.y, FOOTBALL_BALL_RADIUS, duelControlActive || contestControlActive || contestHardLockActive ? 0.84 : 0.7));
   game.ballVel.x *= velocityDamp;
   game.ballVel.z *= velocityDamp;
-  game.ballVel.y *= duelControlActive || contestControlActive || contestHardLockActive ? 0.08 : 0.16;
-  p.kickCooldown = Math.max(p.kickCooldown ?? 0, contestHardLockActive ? 0.28 : duelControlActive ? 0.18 : contestControlActive ? 0.22 : 0.12);
+  game.ballVel.y *= duelControlActive || contestControlActive || contestHardLockActive ? 0.05 : 0.12;
+  p.kickCooldown = Math.max(p.kickCooldown ?? 0, contestHardLockActive ? 0.32 : duelControlActive ? 0.22 : contestControlActive ? 0.26 : 0.16);
   if (contestHardLockActive) {
     commitFootballRun(
       p,
@@ -470,18 +470,35 @@ export function handleFootballShotRuntime(context) {
   );
   const missesTarget = finishType === null && Math.random() < missChance;
   const highMiss = missesTarget && Math.random() < 0.42;
+  const sailChance = finishType === null
+    ? THREE.MathUtils.clamp(
+        Math.max(0, power - 6.1) * 0.075
+        + Math.max(0, goalDistance - 7.5) * 0.018
+        + (longShotWindow ? 0.08 : 0.02)
+        + (unleashBanger ? 0.16 : 0),
+        0,
+        0.42
+      )
+    : 0;
+  const overhitHigh = !missesTarget && Math.random() < sailChance;
   if (missesTarget) {
     aimedFinishDx += (Math.random() < 0.5 ? -1 : 1) * (0.95 + Math.random() * (longShotWindow ? 2.2 : 1.15));
   }
+  if (overhitHigh) {
+    aimedFinishDx += (Math.random() - 0.5) * (longShotWindow ? 0.72 : 0.34);
+  }
   p.kickSide = shotFoot.kickSide;
   applyFootballKickContact(p, game.ball);
+  const powerLift = THREE.MathUtils.clamp(Math.max(0, power - 5.35) * 0.26, 0, 1.55);
   const shotLoft = finishType === "volley"
-    ? 1.28 + Math.random() * 0.55
-    : longShotWindow
-      ? 1.7 + Math.min(2.3, Math.max(0, goalDistance - 6.1) * 0.26) + (highMiss ? 1.45 : 0.34) + (unleashBanger ? 0.42 : 0) + Math.random() * 0.42
-      : missesTarget && highMiss
-        ? 1.62 + Math.random() * 0.74
-        : 0.18 + Math.max(0, goalDistance - 2.8) * 0.03;
+    ? 2.1 + powerLift * 0.34 + Math.random() * 0.9
+    : overhitHigh
+      ? 3.05 + powerLift * 0.72 + Math.max(0, goalDistance - 4.2) * 0.11 + (unleashBanger ? 0.54 : 0.18) + Math.random() * 1.15
+      : longShotWindow
+        ? 2.85 + powerLift * 0.48 + Math.min(3.25, Math.max(0, goalDistance - 5.8) * 0.36) + (highMiss ? 2.05 : 0.78) + (unleashBanger ? 0.9 : 0.22) + Math.random() * 0.58
+        : missesTarget && highMiss
+          ? 2.5 + powerLift * 0.4 + Math.random() * 1.05
+          : 0.52 + Math.max(0, goalDistance - 2.2) * 0.07 + powerLift * 0.34 + (unleashBanger ? 0.28 : 0.06);
   setFootballBallVelocity(game, aimedFinishDx, finishDz, power, shotLoft);
   if (unleashBanger) {
     p.bangerCooldown = 6.5 + Math.random() * 6.5;

@@ -13,11 +13,7 @@ import {
   TRACK_HURDLE_UNDERPASS_MARGIN,
   TRACK_RUNNER_HURDLE_IMPACT_LIFT,
   TRACK_RUNNER_HURDLE_JUMP_VELOCITY,
-  TRACK_RUNNER_LANE_CHANGE_RATE,
-  TRACK_RUNNER_MAX_PASS_LANE,
-  TRACK_RUNNER_PASS_BACK_CLEARANCE,
-  TRACK_RUNNER_PASS_FRONT_CLEARANCE,
-  TRACK_RUNNER_PASS_TRIGGER
+  TRACK_RUNNER_LANE_CHANGE_RATE
 } from "./game-config.js";
 import {
   commitInstancedMesh,
@@ -26,6 +22,7 @@ import {
 
 const FOOTBALL_REF_CARRY_OFFSET = new THREE.Vector3(0.02, -0.02, 0.12);
 const FOOTBALL_REF_CARRY_WORLD = new THREE.Vector3();
+const FOOTBALL_REF_PLACE_DURATION = 0.62;
 const FOOTBALL_HURDLE_CONTACT_SAMPLE_POINTS = [
   new THREE.Vector3(0, -0.038, 0.24),
   new THREE.Vector3(0, -0.02, 0.14)
@@ -50,7 +47,7 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     game.coach.cardCooldown = Math.max(0, game.coach.cardCooldown - dt);
     game.coach.carryBlend = THREE.MathUtils.damp(
       game.coach.carryBlend ?? 0,
-      game.refRestart?.active && game.refRestart.phase !== "toBall" ? 1 : 0,
+      game.refRestart?.active && game.refRestart.phase === "toCenter" ? 1 : 0,
       7.5,
       dt
     );
@@ -58,11 +55,17 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     const refDx = refTarget.x - game.coach.runner.root.position.x;
     const refDz = refTarget.z - game.coach.runner.root.position.z;
     const refDist = Math.hypot(refDx, refDz);
-    const desiredSpeed = refDist > 4.2 ? 3.6 : refDist > 1.8 ? 2.6 : refDist > 0.45 ? 1.35 : 0;
+    const refClearingKickoff = game.refRestart?.active && game.refRestart.phase === "clear";
+    const refPlacingKickoff = game.refRestart?.active && game.refRestart.phase === "place";
+    const desiredSpeed = refClearingKickoff
+      ? refDist > 3.2 ? 5.6 : refDist > 1.2 ? 4.3 : refDist > 0.28 ? 2.4 : 0
+      : refPlacingKickoff
+        ? 0
+        : refDist > 4.2 ? 3.6 : refDist > 1.8 ? 2.6 : refDist > 0.45 ? 1.35 : 0;
     const desiredVx = refDist > 0.001 ? (refDx / refDist) * desiredSpeed : 0;
     const desiredVz = refDist > 0.001 ? (refDz / refDist) * desiredSpeed : 0;
-    game.coach.vx = THREE.MathUtils.damp(game.coach.vx ?? 0, desiredVx, 6.2, dt);
-    game.coach.vz = THREE.MathUtils.damp(game.coach.vz ?? 0, desiredVz, 6.2, dt);
+    game.coach.vx = THREE.MathUtils.damp(game.coach.vx ?? 0, desiredVx, refClearingKickoff ? 9.4 : 6.2, dt);
+    game.coach.vz = THREE.MathUtils.damp(game.coach.vz ?? 0, desiredVz, refClearingKickoff ? 9.4 : 6.2, dt);
     game.coach.runner.root.position.x += game.coach.vx * dt;
     game.coach.runner.root.position.z += game.coach.vz * dt;
     const refClamped = clampFootballRefereePosition(game.coach.runner.root.position.x, game.coach.runner.root.position.z);
@@ -92,8 +95,10 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
       game.coach.cycle,
       0,
       coachSideStepAmount > 0
-        ? { type: "sideStep", amount: coachSideStepAmount, dir: Math.sign(coachLateral || 1), sprintAmount: THREE.MathUtils.clamp(moveSpeed / 2.1, 0, 1) }
-        : null
+        ? { type: "sideStep", amount: coachSideStepAmount, dir: Math.sign(coachLateral || 1), sprintAmount: THREE.MathUtils.clamp(moveSpeed / (refClearingKickoff ? 2.8 : 2.1), refClearingKickoff ? 0.42 : 0, 1) }
+        : refClearingKickoff
+          ? { sprintAmount: THREE.MathUtils.clamp(moveSpeed / 3.2, 0.52, 1) }
+          : null
     );
     game.coach.runner.leftArm.rotation.z *= 0.7;
     game.coach.runner.rightArm.rotation.z *= 0.7;
@@ -127,6 +132,37 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     }
     game.coach.runner.head.rotation.y = THREE.MathUtils.clamp(-lookDx * 0.045 + game.coach.runner.head.rotation.y, -0.28, 0.28);
     game.coach.runner.head.rotation.x = THREE.MathUtils.clamp(game.coach.runner.head.rotation.x + moveSpeed * 0.01 - lookDz * 0.0035, -0.2, 0.08);
+    if (refPlacingKickoff) {
+      const placeProgress = THREE.MathUtils.clamp((game.refRestart?.timer ?? 0) / FOOTBALL_REF_PLACE_DURATION, 0, 1);
+      const presentBlend = THREE.MathUtils.smoothstep(placeProgress, 0.02, 0.16)
+        * (1 - THREE.MathUtils.smoothstep(placeProgress, 0.2, 0.42));
+      const bendIn = THREE.MathUtils.smoothstep(placeProgress, 0.14, 0.42);
+      const bendOut = THREE.MathUtils.smoothstep(placeProgress, 0.8, 0.99);
+      const bendBlend = THREE.MathUtils.clamp(bendIn * (1 - bendOut), 0, 1);
+      const releaseBlend = THREE.MathUtils.smoothstep(placeProgress, 0.5, 0.88);
+      const flourishBlend = THREE.MathUtils.clamp(presentBlend + bendBlend * 0.28, 0, 1);
+      game.coach.runner.torsoPivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.torsoPivot.rotation.x, -0.92, bendBlend);
+      game.coach.runner.torsoPivot.rotation.z = THREE.MathUtils.lerp(game.coach.runner.torsoPivot.rotation.z, 0.12, bendBlend);
+      game.coach.runner.torsoPivot.rotation.y = THREE.MathUtils.lerp(game.coach.runner.torsoPivot.rotation.y, 0.1, flourishBlend);
+      game.coach.runner.head.rotation.x = THREE.MathUtils.lerp(game.coach.runner.head.rotation.x, 0.46, bendBlend);
+      game.coach.runner.head.rotation.y = THREE.MathUtils.lerp(game.coach.runner.head.rotation.y, -0.08, bendBlend * 0.7);
+      game.coach.runner.leftArm.rotation.x = THREE.MathUtils.lerp(game.coach.runner.leftArm.rotation.x, -2.38, bendBlend);
+      game.coach.runner.leftArm.rotation.y = THREE.MathUtils.lerp(game.coach.runner.leftArm.rotation.y, 0.66, bendBlend);
+      game.coach.runner.leftArm.rotation.z = THREE.MathUtils.lerp(game.coach.runner.leftArm.rotation.z, 0.66, bendBlend);
+      game.coach.runner.leftArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.leftArmRig.lowerPivot.rotation.x, -1.02, bendBlend);
+      game.coach.runner.rightArm.rotation.x = THREE.MathUtils.lerp(game.coach.runner.rightArm.rotation.x, -1.48, flourishBlend);
+      game.coach.runner.rightArm.rotation.y = THREE.MathUtils.lerp(game.coach.runner.rightArm.rotation.y, -0.34, flourishBlend);
+      game.coach.runner.rightArm.rotation.z = THREE.MathUtils.lerp(game.coach.runner.rightArm.rotation.z, -0.6, flourishBlend);
+      game.coach.runner.rightArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.rightArmRig.lowerPivot.rotation.x, -0.94, flourishBlend);
+      game.coach.runner.leftLegRig.root.rotation.x = THREE.MathUtils.lerp(game.coach.runner.leftLegRig.root.rotation.x, THREE.MathUtils.degToRad(24), bendBlend);
+      game.coach.runner.rightLegRig.root.rotation.x = THREE.MathUtils.lerp(game.coach.runner.rightLegRig.root.rotation.x, THREE.MathUtils.degToRad(16), bendBlend);
+      game.coach.runner.leftLegRig.kneePivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.leftLegRig.kneePivot.rotation.x, THREE.MathUtils.degToRad(42), bendBlend);
+      game.coach.runner.rightLegRig.kneePivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.rightLegRig.kneePivot.rotation.x, THREE.MathUtils.degToRad(28), bendBlend);
+      game.coach.runner.leftLegRig.footPivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.leftLegRig.footPivot.rotation.x, THREE.MathUtils.degToRad(-16), bendBlend);
+      game.coach.runner.rightLegRig.footPivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.rightLegRig.footPivot.rotation.x, THREE.MathUtils.degToRad(-8), bendBlend);
+      game.coach.runner.leftArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.leftArmRig.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-18), releaseBlend * 0.5);
+      game.coach.runner.rightArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(game.coach.runner.rightArmRig.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-38), releaseBlend * 0.24);
+    }
     if (game.coach.yellowCard) {
       const showYellow = game.coach.cardColor === "yellow";
       game.coach.yellowCard.visible = showYellow && cardBlend > 0.02;
@@ -144,7 +180,7 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     if (game.coach.carryBall) {
       game.coach.carryBall.visible = false;
     }
-    if (game.refRestart?.active && game.refRestart.phase !== "toBall") {
+    if (game.refRestart?.active && game.refRestart.phase === "toCenter") {
       game.coach.runner.leftArmRig.handPivot.updateWorldMatrix(true, false);
       const carryWorld = game.coach.runner.leftArmRig.handPivot.localToWorld(
         FOOTBALL_REF_CARRY_WORLD.copy(FOOTBALL_REF_CARRY_OFFSET)
@@ -239,74 +275,40 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     ? ((toProgress - fromProgress) % laneLength + laneLength) % laneLength
     : ((fromProgress - toProgress) % laneLength + laneLength) % laneLength);
 
-  const isLaneOpenForRunner = (runnerState, candidateLane, frontClear, backClear) => {
-    const dir = runnerState.dir ?? 1;
-    const laneLength = getTrackLaneLength(candidateLane);
-    for (let i = 0; i < game.trackRunners.length; i += 1) {
-      const other = game.trackRunners[i];
-      if (other === runnerState) continue;
-      const otherTargetLane = other.targetLaneIndex ?? other.laneIndex;
-      if (Math.abs(other.laneIndex - candidateLane) > 0.55 && Math.abs(otherTargetLane - candidateLane) > 0.55) continue;
-      const aheadGap = getTrackForwardGap(runnerState.progress, other.progress, laneLength, dir);
-      const behindGap = laneLength - aheadGap;
-      if (aheadGap < frontClear || behindGap < backClear) return false;
-    }
-    return true;
-  };
-
   game.trackRunners.forEach((runnerState) => {
     const dir = runnerState.dir ?? 1;
     const currentLane = runnerState.laneIndex ?? 0;
+    const lockedLane = runnerState.homeLaneIndex ?? runnerState.targetLaneIndex ?? Math.round(currentLane);
     const speedPhase = runnerState.speedPhase ?? 0;
     const speedPulse = 1
       + Math.sin(runnerState.cycle * 0.11 + speedPhase) * 0.05
       + Math.sin(runnerState.cycle * 0.047 + speedPhase * 1.7) * 0.025;
     const desiredSpeed = runnerState.speed * speedPulse;
     runnerState.currentSpeed = desiredSpeed;
+    runnerState.homeLaneIndex = lockedLane;
+    runnerState.targetLaneIndex = lockedLane;
 
-    if (!Number.isFinite(runnerState.targetLaneIndex)) {
-      runnerState.targetLaneIndex = Math.round(currentLane);
-    }
-
-    const laneLength = getTrackLaneLength(currentLane);
-    let blocker = null;
+    const laneLength = getTrackLaneLength(lockedLane);
     let nearestAhead = Infinity;
 
     for (let i = 0; i < game.trackRunners.length; i += 1) {
       const other = game.trackRunners[i];
       if (other === runnerState) continue;
-      if (Math.abs(other.laneIndex - currentLane) > 0.42) continue;
+      const otherLane = other.homeLaneIndex ?? other.targetLaneIndex ?? other.laneIndex ?? 0;
+      if (Math.abs(otherLane - lockedLane) > 0.42) continue;
       const ahead = getTrackForwardGap(runnerState.progress, other.progress, laneLength, dir);
       if (ahead > 0.001 && ahead < nearestAhead) {
         nearestAhead = ahead;
-        blocker = other;
       }
     }
 
-    const blockerSpeed = blocker ? (blocker.currentSpeed ?? blocker.speed ?? 0) : 0;
-    const wantsToPass = Boolean(blocker) && nearestAhead < TRACK_RUNNER_PASS_TRIGGER && desiredSpeed > blockerSpeed + 0.06;
-
-    if (wantsToPass && (runnerState.targetLaneIndex ?? 0) < TRACK_RUNNER_MAX_PASS_LANE) {
-      for (let candidateLane = 1; candidateLane <= TRACK_RUNNER_MAX_PASS_LANE; candidateLane += 1) {
-        if (isLaneOpenForRunner(runnerState, candidateLane, TRACK_RUNNER_PASS_FRONT_CLEARANCE, TRACK_RUNNER_PASS_BACK_CLEARANCE)) {
-          runnerState.targetLaneIndex = candidateLane;
-          break;
-        }
-      }
-    } else if (!wantsToPass && (runnerState.targetLaneIndex ?? 0) > 0) {
-      const enoughRoomToReturn = !blocker || nearestAhead > TRACK_RUNNER_PASS_FRONT_CLEARANCE * 0.9;
-      if (enoughRoomToReturn && isLaneOpenForRunner(runnerState, 0, TRACK_RUNNER_PASS_FRONT_CLEARANCE * 0.85, TRACK_RUNNER_PASS_BACK_CLEARANCE)) {
-        runnerState.targetLaneIndex = 0;
-      }
-    }
-
-    runnerState.laneIndex = THREE.MathUtils.damp(currentLane, runnerState.targetLaneIndex ?? 0, TRACK_RUNNER_LANE_CHANGE_RATE, trackDt);
-    if (Math.abs(runnerState.laneIndex - (runnerState.targetLaneIndex ?? 0)) < 0.02) {
-      runnerState.laneIndex = runnerState.targetLaneIndex ?? 0;
+    runnerState.laneIndex = THREE.MathUtils.damp(currentLane, lockedLane, TRACK_RUNNER_LANE_CHANGE_RATE, trackDt);
+    if (Math.abs(runnerState.laneIndex - lockedLane) < 0.02) {
+      runnerState.laneIndex = lockedLane;
     }
 
     let laneSpeed = desiredSpeed;
-    if ((runnerState.targetLaneIndex ?? 0) === 0 && nearestAhead < 1.35) {
+    if (nearestAhead < 1.35) {
       laneSpeed *= THREE.MathUtils.clamp(nearestAhead / 1.35, 0.72, 1);
     }
 
@@ -338,7 +340,7 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     }
     const hurdleJumpTrigger = TRACK_HURDLE_JUMP_TRIGGER
       + THREE.MathUtils.clamp(laneSpeed * 0.04, 0, TRACK_HURDLE_JUMP_TRIGGER_SPEED_BONUS);
-    if (runnerState.jumpY <= 0.0001 && runnerState.jumpCooldown <= 0 && runnerState.laneIndex < 0.35 && nextHurdle && nextHurdleGap < hurdleJumpTrigger) {
+    if (runnerState.jumpY <= 0.0001 && runnerState.jumpCooldown <= 0 && nextHurdle && nextHurdleGap < hurdleJumpTrigger) {
       runnerState.jumpVel = TRACK_RUNNER_HURDLE_JUMP_VELOCITY + Math.random() * 0.18;
       runnerState.jumpCooldown = 0.72 + Math.random() * 0.14;
     }

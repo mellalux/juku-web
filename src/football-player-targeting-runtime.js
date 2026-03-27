@@ -49,26 +49,26 @@ export function getFootballKeeperTargetRuntime(context) {
   } = context;
 
   p.saveCooldown = Math.max(0, p.saveCooldown - dt);
-  p.diveBlend = Math.max(0, p.diveBlend - dt * 2.15);
-  p.saveLift = Math.max(0, p.saveLift - dt * (p.diveBlend > 0.08 ? 2.9 : 6.8));
-  if (p.diveBlend <= 0.04 && p.saveLift < 0.035) {
+  p.diveBlend = Math.max(0, p.diveBlend - dt * 0.66);
+  p.saveLift = Math.max(0, p.saveLift - dt * (p.diveBlend > 0.62 ? 0.82 : p.diveBlend > 0.24 ? 1.44 : 3.2));
+  if (p.diveBlend <= 0.04 && p.saveLift < 0.03) {
     p.saveLift = 0;
   }
-  const shotOnGoal = game.ballVel.z * p.team < -0.24 && Math.abs(game.ball.position.x) < FOOTBALL_GOAL_WIDTH * 0.8;
+  const shotOnGoal = game.ballVel.z * p.team < -0.2 && Math.abs(game.ball.position.x) < FOOTBALL_GOAL_WIDTH * 0.92;
   const keeperLineZ = defendGoalZ + p.team * 0.44;
   const planeTime = Math.abs(game.ballVel.z) > 0.001 ? (keeperLineZ - game.ball.position.z) / game.ballVel.z : Infinity;
   const predictedSaveX = Number.isFinite(planeTime)
     ? game.ball.position.x + game.ballVel.x * THREE.MathUtils.clamp(planeTime, 0, 0.68)
     : game.ball.position.x;
   const keeperRushDepth = shotOnGoal
-    ? 0.4 + Math.min(0.72, Math.max(0, (Math.abs(game.ball.position.z - defendGoalZ) - 0.8) * 0.1))
+    ? 0.56 + Math.min(1.02, Math.max(0, (Math.abs(game.ball.position.z - defendGoalZ) - 0.65) * 0.13))
     : game.ball.position.y <= FOOTBALL_BALL_CONTROL_HEIGHT && ballDist < 3.2
-      ? 0.34
+      ? 0.46
       : 0;
-  const targetX = THREE.MathUtils.clamp((shotOnGoal ? predictedSaveX * 1.02 : game.ball.position.x * 0.42) + p.roamX * 0.03, -FOOTBALL_GOAL_WIDTH * 0.42, FOOTBALL_GOAL_WIDTH * 0.42);
+  const targetX = THREE.MathUtils.clamp((shotOnGoal ? predictedSaveX * 1.06 : game.ball.position.x * 0.46) + p.roamX * 0.03, -FOOTBALL_GOAL_WIDTH * 0.44, FOOTBALL_GOAL_WIDTH * 0.44);
   const targetZ = shotOnGoal
     ? keeperLineZ - p.team * keeperRushDepth
-    : defendGoalZ + THREE.MathUtils.clamp((game.ball.position.z - defendGoalZ) * 0.16, -0.18, 1.05);
+    : defendGoalZ + THREE.MathUtils.clamp((game.ball.position.z - defendGoalZ) * 0.18, -0.2, 1.18);
 
   return {
     keeperShotOnGoal: shotOnGoal,
@@ -322,7 +322,7 @@ export function getFootballRestartTargetRuntime(context) {
   let targetX;
   let targetZ;
 
-  if (game.refRestart?.active) {
+  if (game.refRestart?.active && game.refRestart.phase !== "clear") {
     p.attackLane = "reset";
     const kickoffResetFlow = (game.refRestart.kind ?? "boundary") === "kickoff";
     const refKickoffTarget = kickoffResetFlow
@@ -368,22 +368,38 @@ export function getFootballRestartTargetRuntime(context) {
     const isKickoffTaker = p.kickoffRole === "taker";
     const isKickoffSupport = p.kickoffRole === "support";
     const isKickoffPresser = p.kickoffRole === "press";
+    const scriptedKickoffActive = (game.kickoffScriptTimer ?? 0) > 0.001;
     if (isKickoffTaker || isKickoffPresser) {
+      const takerApproachSide = isKickoffTaker
+        ? Math.sign(p.kickSide || p.home.x || p.team || 1)
+        : 0;
       const pressBias = p.team === kickoffBiasTeam ? 1.04 : 0.98;
-      const lateralOffset = 0;
+      const lateralOffset = isKickoffTaker
+        ? takerApproachSide * (scriptedKickoffActive
+          ? (game.kickoffScriptTimer ?? 0) > 0.22 ? 0.12 : 0.04
+          : 0.02)
+        : 0;
       targetX = game.ball.position.x + lateralOffset;
-      targetZ = game.ball.position.z - p.team * (isKickoffTaker ? 0.02 : 0.18);
-      targetX = THREE.MathUtils.lerp(p.runner.root.position.x, targetX, 0.94);
-      targetZ = THREE.MathUtils.lerp(p.runner.root.position.z, targetZ, 0.96);
+      targetZ = game.ball.position.z - p.team * (
+        isKickoffTaker
+          ? scriptedKickoffActive
+            ? (game.kickoffScriptTimer ?? 0) > 0.34 ? 0.72 : (game.kickoffScriptTimer ?? 0) > 0.18 ? 0.34 : 0.06
+            : 0.02
+          : scriptedKickoffActive
+            ? (game.kickoffScriptTimer ?? 0) > 0.22 ? 0.84 : 0.34
+            : 0.18
+      );
+      targetX = THREE.MathUtils.lerp(p.runner.root.position.x, targetX, isKickoffTaker ? 0.84 : 0.94);
+      targetZ = THREE.MathUtils.lerp(p.runner.root.position.z, targetZ, isKickoffTaker ? 0.88 : 0.96);
       p.attackLane = isKickoffTaker
         ? "kickoffTouch"
         : "kickoffPress";
-      p.vx = THREE.MathUtils.damp(p.vx, (targetX - p.runner.root.position.x) * pressBias * 2.05, 8.2, dt);
-      p.vz = THREE.MathUtils.damp(p.vz, (targetZ - p.runner.root.position.z) * pressBias * 2.1, 8.4, dt);
+      p.vx = THREE.MathUtils.damp(p.vx, (targetX - p.runner.root.position.x) * pressBias * (isKickoffTaker ? 2.35 : 2.05), isKickoffTaker ? 7.6 : 8.2, dt);
+      p.vz = THREE.MathUtils.damp(p.vz, (targetZ - p.runner.root.position.z) * pressBias * (isKickoffTaker ? 2.45 : 2.1), isKickoffTaker ? 7.8 : 8.4, dt);
     } else if (isKickoffSupport) {
       const supportSide = p.home.x === 0 ? -p.team : Math.sign(p.home.x);
-      targetX = game.ball.position.x + supportSide * 1.15;
-      targetZ = game.ball.position.z - p.team * 1.05;
+      targetX = game.ball.position.x + supportSide * (scriptedKickoffActive ? 1.42 : 1.22);
+      targetZ = game.ball.position.z - p.team * (scriptedKickoffActive ? 0.96 : 1.1);
       p.attackLane = "kickoffSupport";
     } else {
       targetX = THREE.MathUtils.lerp(p.home.x, game.ball.position.x * 0.22 + p.laneBias * 0.14, 0.34);

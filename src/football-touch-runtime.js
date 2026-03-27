@@ -45,8 +45,17 @@ export function getFootballTouchContextRuntime(context) {
     p
   } = context;
 
+  const scriptedKickoffActive = (game.kickoffScriptTimer ?? 0) > 0.001
+    && (game.restartTeam ?? 0) !== 0;
+  const kickoffReleaseActive = (game.kickoffReleaseTimer ?? 0) > 0.001;
+  const kickoffReceiver = kickoffReleaseActive ? (game.kickoffReceiver ?? null) : null;
   const touchReach = ATHLETE_BALL_REACH + (isDeliveryTarget ? 0.18 : 0);
-  const canTouchBall = activeBallPlayer === p && ballDist < touchReach && p.kickCooldown <= 0 && !kickoffLocked;
+  const canTouchBall = !scriptedKickoffActive
+    && (!kickoffReleaseActive || kickoffReceiver === p)
+    && activeBallPlayer === p
+    && ballDist < touchReach
+    && p.kickCooldown <= 0
+    && !kickoffLocked;
   if (!canTouchBall) {
     FOOTBALL_TOUCH_CONTEXT_RESULT.canTouchBall = canTouchBall;
     FOOTBALL_TOUCH_CONTEXT_RESULT.contestControlActive = false;

@@ -116,6 +116,38 @@ export function createUi() {
   replayCard.appendChild(replayFlash);
   document.body.appendChild(replayCard);
 
+  const trackTimerPanel = document.createElement("div");
+  trackTimerPanel.style.position = "fixed";
+  trackTimerPanel.style.right = "14px";
+  trackTimerPanel.style.top = "14px";
+  trackTimerPanel.style.zIndex = "11";
+  trackTimerPanel.style.display = "flex";
+  trackTimerPanel.style.flexDirection = "column";
+  trackTimerPanel.style.alignItems = "flex-end";
+  trackTimerPanel.style.gap = "4px";
+  trackTimerPanel.style.padding = "11px 14px 12px";
+  trackTimerPanel.style.borderRadius = "18px";
+  trackTimerPanel.style.background = "rgba(10, 16, 24, 0.82)";
+  trackTimerPanel.style.boxShadow = "0 12px 30px rgba(15, 23, 42, 0.24)";
+  trackTimerPanel.style.color = "#f8fafc";
+  trackTimerPanel.style.pointerEvents = "none";
+
+  const trackTimerLabel = document.createElement("div");
+  trackTimerLabel.textContent = "TRACK TIME";
+  trackTimerLabel.style.font = '800 10px/1 "Trebuchet MS", Verdana, sans-serif';
+  trackTimerLabel.style.letterSpacing = "0.16em";
+  trackTimerLabel.style.color = "#bfdbfe";
+
+  const trackTimerValue = document.createElement("div");
+  trackTimerValue.textContent = "00:00.00";
+  trackTimerValue.style.font = '900 24px/1 "Trebuchet MS", Verdana, sans-serif';
+  trackTimerValue.style.letterSpacing = "0.06em";
+  trackTimerValue.style.fontVariantNumeric = "tabular-nums";
+
+  trackTimerPanel.appendChild(trackTimerLabel);
+  trackTimerPanel.appendChild(trackTimerValue);
+  document.body.appendChild(trackTimerPanel);
+
   return {
     attackStatus,
     behaviorModeButtons,
@@ -131,6 +163,7 @@ export function createUi() {
     replayCard,
     replayFlash,
     scoreStatus,
+    trackTimerValue,
     touchCameraButtons,
     touchCameraName,
     touchEquipButton,

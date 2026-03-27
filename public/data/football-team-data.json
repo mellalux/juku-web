@@ -1,0 +1,18 @@
+{
+  "red": [
+    { "number": 1, "name": "Markus Saar", "role": "keeper", "positionLabel": "Goalkeeper", "preferredFoot": "right", "trait": "reflex", "speedProfile": "balanced" },
+    { "number": 4, "name": "Karl Tamm", "role": "defender", "positionLabel": "Center Back", "preferredFoot": "right", "trait": "tackle", "speedProfile": "balanced" },
+    { "number": 17, "name": "Rene Kask", "role": "defender", "positionLabel": "Full Back", "preferredFoot": "left", "trait": "press", "speedProfile": "fast" },
+    { "number": 9, "name": "Artur Lepp", "role": "attacker", "positionLabel": "Left Forward", "preferredFoot": "left", "trait": "dribble", "attackProfile": "playmaker", "speedProfile": "fast" },
+    { "number": 11, "name": "Martin Kuusk", "role": "attacker", "positionLabel": "Striker", "preferredFoot": "right", "trait": "finish", "attackProfile": "poacher", "speedProfile": "balanced" },
+    { "number": 27, "name": "Sander Oja", "role": "attacker", "positionLabel": "Right Forward", "preferredFoot": "right", "trait": "pace", "attackProfile": "runner", "speedProfile": "sprinter" }
+  ],
+  "blue": [
+    { "number": 1, "name": "Rasmus Kivi", "role": "keeper", "positionLabel": "Goalkeeper", "preferredFoot": "right", "trait": "reflex", "speedProfile": "balanced" },
+    { "number": 5, "name": "Oliver Kask", "role": "defender", "positionLabel": "Center Back", "preferredFoot": "right", "trait": "mark", "speedProfile": "balanced" },
+    { "number": 14, "name": "Mark Randel", "role": "defender", "positionLabel": "Full Back", "preferredFoot": "left", "trait": "intercept", "speedProfile": "fast" },
+    { "number": 19, "name": "Mihkel Aron", "role": "attacker", "positionLabel": "Left Forward", "preferredFoot": "left", "trait": "dribble", "attackProfile": "playmaker", "speedProfile": "balanced" },
+    { "number": 51, "name": "Lucas Nikolas", "role": "attacker", "positionLabel": "Striker", "preferredFoot": "right", "trait": "finish", "attackProfile": "poacher", "speedProfile": "fast" },
+    { "number": 7, "name": "Teodor Oliver", "role": "attacker", "positionLabel": "Right Forward", "preferredFoot": "right", "trait": "pace", "attackProfile": "runner", "speedProfile": "sprinter" }
+  ]
+}

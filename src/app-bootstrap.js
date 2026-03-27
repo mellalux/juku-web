@@ -4,6 +4,7 @@ import { renderCamera3PipView } from "./camera-system.js";
 import { createFootballBridge } from "./football-bridge.js";
 import { createFootballBehaviorState } from "./football-behavior-state.js";
 import { buildFootballGame } from "./football-build.js";
+import { loadFootballTeamData } from "./football-roster-data.js";
 import { makeFootballNameTag } from "./football-ui-build.js";
 import { buildJuku, buildSword } from "./juku-build.js";
 import { renderGoalReplay3DView } from "./football-replay-render.js";
@@ -18,9 +19,18 @@ import {
 
 let appBooted = false;
 
-export function bootApp() {
+function formatTrackTime(seconds) {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const secs = Math.floor(safeSeconds % 60);
+  const hundredths = Math.floor((safeSeconds - Math.floor(safeSeconds)) * 100);
+  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`;
+}
+
+export async function bootApp() {
   if (appBooted) return;
   appBooted = true;
+  const footballTeamData = await loadFootballTeamData();
 
   const {
     attackStatus,
@@ -37,6 +47,7 @@ export function bootApp() {
     replayCard,
     replayFlash,
     scoreStatus,
+    trackTimerValue,
     touchCameraButtons,
     touchCameraName,
     touchEquipButton,
@@ -88,7 +99,7 @@ export function bootApp() {
   const runningTrack = buildRunningTrack();
   scene.add(runningTrack);
 
-  const footballGame = buildFootballGame();
+  const footballGame = buildFootballGame(footballTeamData);
   footballGame.kickoffTeam = Math.random() < 0.5 ? 1 : -1;
   scene.add(footballGame.group);
 
@@ -184,11 +195,19 @@ export function bootApp() {
     clampGoalInteriorPosition
   });
 
+  if (trackTimerValue) {
+    trackTimerValue.textContent = formatTrackTime(state.trackTimer ?? 0);
+  }
+
   function tick(now) {
     const dt = Math.min((now - state.lastT) / 1000, 0.05);
     state.lastT = now;
     updateJuku(dt);
     updateFootballGame(footballGame, state.pauseFootball ? 0 : dt, state.pauseTrack ? 0 : dt);
+    state.trackTimer += state.pauseTrack ? 0 : dt;
+    if (trackTimerValue) {
+      trackTimerValue.textContent = formatTrackTime(state.trackTimer);
+    }
     if (!state.pauseFootball) {
       recordFootballReplay(footballGame, dt);
       updateGoalReplay(dt, footballGame);

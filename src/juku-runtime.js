@@ -1,10 +1,8 @@
 import * as THREE from "./three.js";
 import {
   FACE_NAMES,
-  FOOTBALL_BALL_RADIUS,
   GRAVITY,
   JUKU_BASE_Y,
-  JUKU_COLLIDER_RADIUS,
   JUKU_SPEED,
   JUKU_TURN_SPEED,
   JUMP_VELOCITY,
@@ -49,7 +47,7 @@ function updateJukuLegPose(leg, side, state) {
 
 export function updateJukuRuntime(
   dt,
-  { state, footballGame, updateTouchEquipLabel, resolveJukuCollisions, clampGoalInteriorPosition }
+  { state, updateTouchEquipLabel, resolveJukuCollisions, clampGoalInteriorPosition }
 ) {
   state.faceTime += dt;
   if (state.blinkTimer > 0) {
@@ -171,30 +169,6 @@ export function updateJukuRuntime(
   clampGoalInteriorPosition(resolved.x, resolved.z, resolved);
   state.x = resolved.x;
   state.z = resolved.z;
-
-  if (footballGame?.ball && !footballGame.celebration?.active && (footballGame.restartHoldTimer ?? 0) <= 0.001) {
-    const ball = footballGame.ball;
-    const ballVel = footballGame.ballVel;
-    const dx = ball.position.x - state.x;
-    const dz = ball.position.z - state.z;
-    const dist = Math.hypot(dx, dz);
-    const minDist = JUKU_COLLIDER_RADIUS + FOOTBALL_BALL_RADIUS + 0.18;
-    const lowBall = ball.position.y <= FOOTBALL_BALL_RADIUS + 0.42;
-    if (lowBall && dist < minDist) {
-      const nx = dist > 0.001 ? dx / dist : fx || 1;
-      const nz = dist > 0.001 ? dz / dist : fz || 0;
-      const overlap = Math.max(0.08, minDist - dist);
-      ball.position.x += nx * overlap;
-      ball.position.z += nz * overlap;
-      const jukuMoveSpeed = Math.abs(moveInput) * JUKU_SPEED * moveScale;
-      const pushPower = 1.9 + jukuMoveSpeed * 0.95;
-      ballVel.x = nx * Math.max(Math.abs(ballVel.x), pushPower) + fx * (0.95 + jukuMoveSpeed * 0.65);
-      ballVel.z = nz * Math.max(Math.abs(ballVel.z), pushPower) + fz * (0.95 + jukuMoveSpeed * 0.65);
-      if (ball.position.y < FOOTBALL_BALL_RADIUS) {
-        ball.position.y = FOOTBALL_BALL_RADIUS;
-      }
-    }
-  }
 
   if (moveInput !== 0) {
     state.walkBlend = Math.min(1, state.walkBlend + dt * 6.2);

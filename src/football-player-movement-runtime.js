@@ -77,10 +77,23 @@ export function updateFootballPlayerMovementRuntime(context) {
   const dirX = currentTargetX - p.runner.root.position.x;
   const dirZ = currentTargetZ - p.runner.root.position.z;
   const dirLen = Math.max(0.001, Math.hypot(dirX, dirZ));
-  const keeperSpeedBoost = p.role === "keeper"
-    ? (keeperShotOnGoal ? 0.44 : ballDist < 3.6 ? 0.24 : 0)
+  const keeperDiveAmount = p.role === "keeper" ? THREE.MathUtils.clamp(p.diveBlend ?? 0, 0, 1) : 0;
+  const keeperDiveProgress = p.role === "keeper" ? 1 - keeperDiveAmount : 0;
+  const keeperDiveBurst = p.role === "keeper"
+    ? THREE.MathUtils.clamp(
+      THREE.MathUtils.smoothstep(keeperDiveAmount, 0.16, 0.96)
+      * (1 - THREE.MathUtils.smoothstep(keeperDiveProgress, 0.46, 0.96)),
+      0,
+      1
+    )
     : 0;
-  const baseSpeed = p.role === "keeper" ? 1.72 + (p.saveReach ?? 0) * 0.26 + keeperSpeedBoost : isCounterRunner ? 1.72 : tacticalRole === "supportAttack" ? 1.48 : tacticalRole === "recoverDefence" ? 1.46 : p.role === "defender" ? 1.38 + FOOTBALL_BEHAVIOR.defenderSpeedBonus : 1.56;
+  const keeperDiveSkid = p.role === "keeper"
+    ? THREE.MathUtils.smoothstep(keeperDiveProgress, 0.34, 0.98)
+    : 0;
+  const keeperSpeedBoost = p.role === "keeper"
+    ? (keeperShotOnGoal ? 0.92 : ballDist < 3.6 ? 0.36 : 0)
+    : 0;
+  const baseSpeed = p.role === "keeper" ? 2.04 + (p.saveReach ?? 0) * 0.36 + keeperSpeedBoost : isCounterRunner ? 1.72 : tacticalRole === "supportAttack" ? 1.48 : tacticalRole === "recoverDefence" ? 1.46 : p.role === "defender" ? 1.38 + FOOTBALL_BEHAVIOR.defenderSpeedBonus : 1.56;
   const burst = isCounterRunner ? 1.08 : (tacticalRole === "attacker" || tacticalRole === "supportAttack") && ballDist < 2.4 ? 1 : ballDist < 2.5 ? 0.72 : 0.2;
   const tempoPulse = 1
     + Math.sin(game.phase * (1.2 + (p.tempoRate ?? 1) * 0.45) + (p.tempoPhase ?? 0)) * 0.09 * (p.tempoJitter ?? 1)
@@ -90,10 +103,19 @@ export function updateFootballPlayerMovementRuntime(context) {
   const speedPulse = THREE.MathUtils.clamp(tempoPulse + burstPulse + runSprintBoost + (isCounterRunner ? 0.06 : 0), 0.78, 1.48);
   const desiredSpeed = (baseSpeed + burst * p.pressBias + urgencyRunBias) * p.speedBias * (p.paceVariance ?? 1) * speedPulse;
   const targetDeadzone = activeBallPlayer === p ? 0.02 : isDeliveryTarget ? 0.08 : 0.18;
-  const desiredVx = dirLen <= targetDeadzone ? 0 : (dirX / dirLen) * desiredSpeed;
-  const desiredVz = dirLen <= targetDeadzone ? 0 : (dirZ / dirLen) * desiredSpeed;
+  let desiredVx = dirLen <= targetDeadzone ? 0 : (dirX / dirLen) * desiredSpeed;
+  let desiredVz = dirLen <= targetDeadzone ? 0 : (dirZ / dirLen) * desiredSpeed;
+  if (p.role === "keeper" && (p.diveBlend ?? 0) > 0.04) {
+    const lateralDiveSpeed = p.diveDir * (5.1 + (p.saveReach ?? 0) * 1.55 + (p.saveHeight ?? 0.45) * 1.45) * keeperDiveBurst;
+    const forwardDiveSpeed = p.team * (1.52 + (p.saveHeight ?? 0.45) * 0.96) * keeperDiveBurst
+      + p.team * (0.74 + (p.saveHeight ?? 0.45) * 0.42) * keeperDiveSkid;
+    desiredVx = desiredVx * 0.08 + lateralDiveSpeed;
+    desiredVz = desiredVz * 0.1 + forwardDiveSpeed;
+  }
 
-  const movementDamp = p.role === "keeper" ? (keeperShotOnGoal ? 11.5 : 9.6) : 8;
+  const movementDamp = p.role === "keeper"
+    ? ((p.diveBlend ?? 0) > 0.04 ? 21.5 : keeperShotOnGoal ? 15.2 : 11.8)
+    : 8;
   p.vx = THREE.MathUtils.damp(p.vx, desiredVx, movementDamp, dt);
   p.vz = THREE.MathUtils.damp(p.vz, desiredVz, movementDamp, dt);
 
@@ -134,11 +156,12 @@ export function updateFootballPlayerMovementRuntime(context) {
   const moveSpeed = Math.hypot(p.vx, p.vz);
   let movementPose = { kickAmount: p.kickBlend ?? 0, kickSide: p.kickSide ?? 1, sprintAmount: p.sprintBlend ?? 0 };
   let animSpeed = moveSpeed;
+  let locomotionPosePenalty = 0;
   if (p.role === "keeper" && p.diveBlend <= 0) {
     const keeperLookX = game.ball.position.x - p.runner.root.position.x;
     const keeperLookZ = game.ball.position.z - p.runner.root.position.z;
     const keeperFacing = Math.atan2(keeperLookX, keeperLookZ);
-    p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, keeperFacing, dt, 8.8);
+    p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, keeperFacing, dt, 11.6);
     const rightX = Math.cos(p.runner.root.rotation.y);
     const rightZ = -Math.sin(p.runner.root.rotation.y);
     const lateralSpeed = p.vx * rightX + p.vz * rightZ;
@@ -150,7 +173,7 @@ export function updateFootballPlayerMovementRuntime(context) {
       1
     );
     const sideStepAmount = Math.abs(lateralSpeed) > Math.abs(forwardSpeed) + 0.04
-      ? THREE.MathUtils.clamp(Math.abs(lateralSpeed) / 1.05, 0, 1)
+      ? THREE.MathUtils.clamp(Math.abs(lateralSpeed) / 0.9, 0, 1)
       : 0;
     movementPose = {
       ...movementPose,
@@ -158,19 +181,60 @@ export function updateFootballPlayerMovementRuntime(context) {
       keeperSetDir: Math.sign((game.ball.position.x - p.runner.root.position.x) || lateralSpeed || 1)
     };
     if (sideStepAmount > 0.02) {
-      movementPose.type = "sideStep";
-      movementPose.amount = sideStepAmount;
-      movementPose.dir = Math.sign(lateralSpeed || 1);
+      movementPose.sideStepAmount = sideStepAmount;
+      movementPose.sideStepDir = Math.sign(lateralSpeed || 1);
     }
-    animSpeed = sideStepAmount > 0.02 ? Math.abs(lateralSpeed) * 0.58 : Math.min(moveSpeed, 0.16);
+    animSpeed = sideStepAmount > 0.02 ? Math.abs(lateralSpeed) * 0.84 : Math.min(moveSpeed, 0.28);
   } else if (moveSpeed > 0.05) {
     const moveYaw = Math.atan2(p.vx, p.vz);
-    const targetYaw = Math.abs(Math.atan2(Math.sin(moveYaw - p.runner.root.rotation.y), Math.cos(moveYaw - p.runner.root.rotation.y))) > Math.PI * 0.72
+    const ballLookX = game.ball.position.x - p.runner.root.position.x;
+    const ballLookZ = game.ball.position.z - p.runner.root.position.z;
+    const ballFacing = Math.atan2(ballLookX, ballLookZ);
+    const ballHolderTeam = game.ballHolder?.team ?? 0;
+    const defensiveTracking = ballHolderTeam === -p.team || tacticalRole === "recoverDefence" || p.attackLane === "press" || p.attackLane === "kickoffPress";
+    const looseBallTracking = ballHolderTeam === 0;
+    const supportTracking = isDeliveryTarget || (ballHolderTeam === p.team && ballDist < 2.6);
+    const trackingRange = defensiveTracking ? 6.2 : looseBallTracking ? 4.9 : supportTracking ? 3.2 : 2.25;
+    const trackingFalloff = defensiveTracking ? 2.8 : looseBallTracking ? 2.35 : supportTracking ? 1.65 : 1.2;
+    const trackingWeight = defensiveTracking ? 1 : looseBallTracking ? 0.82 : supportTracking ? 0.68 : 0.44;
+    const ballTrackAmount = activeBallPlayer === p
+      ? 0
+      : THREE.MathUtils.clamp((trackingRange - ballDist) / trackingFalloff, 0, 1) * trackingWeight;
+    const moveVsBallAngle = Math.abs(Math.atan2(Math.sin(moveYaw - ballFacing), Math.cos(moveYaw - ballFacing)));
+    const trackBallFacing = ballTrackAmount > 0.1 && moveVsBallAngle > 0.2;
+    const fallbackYaw = Math.abs(Math.atan2(Math.sin(moveYaw - p.runner.root.rotation.y), Math.cos(moveYaw - p.runner.root.rotation.y))) > Math.PI * 0.72
       ? Math.atan2(dirX, dirZ)
       : moveYaw;
-    p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, targetYaw, dt, 7.2);
+    const facingYaw = trackBallFacing ? ballFacing : fallbackYaw;
+    p.runner.root.rotation.y = steerFootballFacing(
+      p.runner.root.rotation.y,
+      facingYaw,
+      dt,
+      trackBallFacing ? 9.1 : 7.2
+    );
+    if (trackBallFacing) {
+      const rightX = Math.cos(p.runner.root.rotation.y);
+      const rightZ = -Math.sin(p.runner.root.rotation.y);
+      const lateralSpeed = p.vx * rightX + p.vz * rightZ;
+      const forwardSpeed = p.vx * Math.sin(p.runner.root.rotation.y) + p.vz * Math.cos(p.runner.root.rotation.y);
+      const sideStepAmount = THREE.MathUtils.clamp(
+        (Math.abs(lateralSpeed) - Math.max(0.04, forwardSpeed * 0.28)) / 0.92,
+        0,
+        1
+      ) * THREE.MathUtils.clamp(0.36 + ballTrackAmount * 0.92, 0, 1);
+      const backpedalAmount = THREE.MathUtils.clamp((-forwardSpeed - 0.04) / 0.95, 0, 1)
+        * THREE.MathUtils.clamp(0.42 + ballTrackAmount * 0.88, 0, 1);
+      if (sideStepAmount > 0.02) {
+        movementPose.sideStepAmount = sideStepAmount;
+        movementPose.sideStepDir = Math.sign(lateralSpeed || ballLookX || 1);
+      }
+      if (backpedalAmount > 0.02) {
+        movementPose.backpedalAmount = backpedalAmount;
+      }
+      locomotionPosePenalty = Math.max(sideStepAmount * 0.22, backpedalAmount * 0.44);
+    }
   }
-  const sprintTarget = THREE.MathUtils.clamp((moveSpeed - (p.role === "keeper" ? 1.28 : 1.62)) / 0.9, 0, 1)
+  const sprintTarget = THREE.MathUtils.clamp((moveSpeed - (p.role === "keeper" ? 1.28 : 1.62)) / 0.9, 0, 1) * (1 - locomotionPosePenalty)
     + (p.goalRunTimer > 0 ? 0.42 : 0)
     + (p.burstTimer > 0 ? 0.2 : 0);
   p.sprintBlend = THREE.MathUtils.damp(p.sprintBlend ?? 0, THREE.MathUtils.clamp(sprintTarget, 0, 1), 6.5, dt);

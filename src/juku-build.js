@@ -191,7 +191,7 @@ function buildSwordHand(parent, palette, side, { addScaledPart }) {
 }
 
 export function buildArm(palette, swordHand, deps) {
-  const { addPart } = deps;
+  const { addPart, addScaledPart } = deps;
   const root = new THREE.Group();
   const upperPivot = new THREE.Group();
   const lowerPivot = new THREE.Group();
@@ -199,6 +199,21 @@ export function buildArm(palette, swordHand, deps) {
   root.add(upperPivot);
   addPart(upperPivot, getSharedSphereGeometry(0.076, 18, 14), palette.skin, new THREE.Vector3(0, 0, 0));
   addPart(upperPivot, getSharedCylinderGeometry(0.058, 0.05, 0.31, 18), palette.skin, new THREE.Vector3(0, -0.155, 0));
+  const sleeveCap = addScaledPart(
+    upperPivot,
+    getSharedSphereGeometry(0.086, 18, 14),
+    palette.shirt,
+    new THREE.Vector3(0, -0.018, 0.004),
+    new THREE.Vector3(1.06, 0.94, 1.04)
+  );
+  const sleeveTube = addPart(
+    upperPivot,
+    getSharedCylinderGeometry(0.066, 0.058, 0.13, 18),
+    palette.shirt,
+    new THREE.Vector3(0, -0.092, 0.004)
+  );
+  sleeveCap.userData.shirtRegion = true;
+  sleeveTube.userData.shirtRegion = true;
   lowerPivot.position.set(0, -0.31, 0);
   upperPivot.add(lowerPivot);
   addPart(lowerPivot, getSharedSphereGeometry(0.06, 16, 12), palette.skin, new THREE.Vector3(0, 0, 0));
@@ -308,7 +323,7 @@ export function buildJuku() {
   torso.position.set(0, 2.15, -0.03);
   root.add(torso);
   const hips = addHumanoidHips(root, palette.pants, new THREE.Vector3(0, 1.81, -0.02));
-  addHumanoidTorso(torso, {
+  const torsoShape = addHumanoidTorso(torso, {
     shirt: palette.shirt,
     shirtBright: 0x3b6fc1,
     shirtMid: 0x3768b7,
@@ -421,9 +436,9 @@ export function buildJuku() {
 
   const leftArm = buildArm(palette, false, limbDeps);
   const rightArm = buildArm(palette, true, limbDeps);
-  leftArm.root.position.set(0.43, 2.5, 0.01);
-  rightArm.root.position.set(-0.43, 2.5, 0.01);
-  root.add(leftArm.root, rightArm.root);
+  leftArm.root.position.copy(torsoShape.leftShoulderAnchor);
+  rightArm.root.position.copy(torsoShape.rightShoulderAnchor);
+  torso.add(leftArm.root, rightArm.root);
 
   const heldSword = buildSword();
   heldSword.root.scale.setScalar(1.08);

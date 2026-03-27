@@ -22,6 +22,28 @@ import {
 
 const stripedShirtMaterialCache = new Map();
 
+function getKeeperDiveState(amount = 0) {
+  const diveAmount = THREE.MathUtils.clamp(amount, 0, 1);
+  const progress = 1 - diveAmount;
+  const takeoff = THREE.MathUtils.smoothstep(diveAmount, 0.14, 0.96)
+    * (1 - THREE.MathUtils.smoothstep(progress, 0.22, 0.54));
+  const airborne = THREE.MathUtils.smoothstep(progress, 0.08, 0.34)
+    * (1 - THREE.MathUtils.smoothstep(progress, 0.52, 0.82));
+  const landing = THREE.MathUtils.smoothstep(progress, 0.46, 0.98);
+  return {
+    amount: diveAmount,
+    progress,
+    takeoff,
+    airborne,
+    landing,
+    pose: THREE.MathUtils.clamp(takeoff * 0.82 + airborne * 1.06 + landing * 0.94, 0, 1.08),
+    reach: THREE.MathUtils.clamp(takeoff * 0.9 + airborne * 1.12 + landing * 0.54, 0, 1.16),
+    roll: THREE.MathUtils.clamp(airborne * 0.96 + landing * 1.14 + takeoff * 0.18, 0, 1.28),
+    lift: Math.sin(THREE.MathUtils.clamp(progress / 0.74, 0, 1) * Math.PI),
+    skid: landing * landing
+  };
+}
+
 function makeStripedShirtMaterial(base = 0xf7f7f4, stripe = 0x111214) {
   const cacheKey = `${base}|${stripe}`;
   const cachedMaterial = stripedShirtMaterialCache.get(cacheKey);
@@ -58,7 +80,7 @@ function makeStripedShirtMaterial(base = 0xf7f7f4, stripe = 0x111214) {
 export function applyStripedShirtToTorso(torso, base = 0xf7f7f4, stripe = 0x111214) {
   const stripedMaterial = makeStripedShirtMaterial(base, stripe);
   torso.traverse((obj) => {
-    if (!obj.isMesh) return;
+    if (!obj.isMesh || !obj.userData.shirtRegion) return;
     obj.material = stripedMaterial;
   });
 }
@@ -85,7 +107,7 @@ export function buildRunner(colors) {
   torso.position.set(0, 2.15, -0.03);
   root.add(torso);
   const hips = addHumanoidHips(root, palette.pants, new THREE.Vector3(0, 1.81, -0.02));
-  addHumanoidTorso(torso, {
+  const torsoShape = addHumanoidTorso(torso, {
     shirt: palette.shirt,
     shirtBright,
     shirtMid,
@@ -159,9 +181,9 @@ export function buildRunner(colors) {
 
   const leftArmRig = buildArm(palette, false, limbDeps);
   const rightArmRig = buildArm(palette, false, limbDeps);
-  leftArmRig.root.position.set(0.43, 2.5, 0.01);
-  rightArmRig.root.position.set(-0.43, 2.5, 0.01);
-  root.add(leftArmRig.root, rightArmRig.root);
+  leftArmRig.root.position.copy(torsoShape.leftShoulderAnchor);
+  rightArmRig.root.position.copy(torsoShape.rightShoulderAnchor);
+  torso.add(leftArmRig.root, rightArmRig.root);
 
   const leftLegRig = buildLeg(palette, limbDeps);
   const rightLegRig = buildLeg(palette, limbDeps);
@@ -216,14 +238,30 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
   const kickAmount = THREE.MathUtils.clamp(specialPose?.kickAmount ?? 0, 0, 1);
   const kickSide = specialPose?.kickSide === 0 ? 1 : Math.sign(specialPose?.kickSide ?? 1);
   const sprintAmount = THREE.MathUtils.clamp(specialPose?.sprintAmount ?? 0, 0, 1);
-  const sideStepAmount = THREE.MathUtils.clamp(specialPose?.type === "sideStep" ? specialPose.amount ?? 0 : 0, 0, 1);
-  const sideStepDir = specialPose?.type === "sideStep" && specialPose.dir !== 0 ? Math.sign(specialPose.dir ?? 1) : 1;
+  const sideStepAmount = THREE.MathUtils.clamp(
+    specialPose?.sideStepAmount ?? (specialPose?.type === "sideStep" ? specialPose.amount ?? 0 : 0),
+    0,
+    1
+  );
+  const sideStepDir = specialPose?.sideStepDir != null && specialPose.sideStepDir !== 0
+    ? Math.sign(specialPose.sideStepDir)
+    : specialPose?.type === "sideStep" && specialPose.dir !== 0
+      ? Math.sign(specialPose.dir ?? 1)
+      : 1;
+  const backpedalAmount = THREE.MathUtils.clamp(
+    specialPose?.backpedalAmount ?? (specialPose?.type === "backpedal" ? specialPose.amount ?? 0 : 0),
+    0,
+    1
+  );
   const keeperSetAmount = THREE.MathUtils.clamp(specialPose?.keeperSetAmount ?? 0, 0, 1);
   const keeperSetDir = specialPose?.keeperSetDir === 0 ? 1 : Math.sign(specialPose?.keeperSetDir ?? 1);
   const celebrationAmount = THREE.MathUtils.clamp(specialPose?.type === "celebration" ? specialPose.amount ?? 0 : 0, 0, 1);
   const celebrationSide = specialPose?.side === 0 ? 1 : Math.sign(specialPose?.side ?? 1);
   const celebrationBounce = THREE.MathUtils.clamp(specialPose?.bounce ?? 0, 0, 1);
-  const keeperDiveAmount = THREE.MathUtils.clamp(specialPose?.type === "keeperDive" ? specialPose.amount ?? 0 : 0, 0, 1);
+  const keeperDiveState = specialPose?.type === "keeperDive"
+    ? getKeeperDiveState(specialPose.amount ?? 0)
+    : null;
+  const keeperDiveAmount = keeperDiveState?.amount ?? 0;
   const keeperDiveDir = specialPose?.type === "keeperDive" && specialPose.dir !== 0 ? Math.sign(specialPose.dir ?? 1) : 1;
   const keeperDiveHeight = THREE.MathUtils.clamp(specialPose?.type === "keeperDive" ? specialPose.saveHeight ?? 0.45 : 0.45, 0, 1);
 
@@ -232,6 +270,7 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
     const idleLock = blend < 0.035
       && sprintAmount < 0.05
       && sideStepAmount < 0.02
+      && backpedalAmount < 0.02
       && keeperSetAmount < 0.02
       && celebrationAmount < 0.02
       && keeperDiveAmount < 0.02
@@ -242,16 +281,18 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
     const athleteKneeLift = runner.athleteKneeLift ?? 1;
     const kneeLiftScale = THREE.MathUtils.clamp(0.82 + (athleteKneeLift - 0.9) * 0.45, 0.72, 1.04);
     const swing = Math.sin(cycle) * 0.84 * blend * strideBoost * kneeLiftScale;
+    const reverseSwing = -Math.sin(cycle) * 0.66 * blend * (0.86 + sprintAmount * 0.08) * kneeLiftScale;
+    const locomotionSwing = THREE.MathUtils.lerp(swing, reverseSwing, backpedalAmount);
     const sideSwing = Math.sin(cycle) * 0.82 * sideStepAmount;
     const motionScale = runner.motionScale ?? 1;
     const bounce = Math.abs(Math.sin(cycle * 1.08)) * 0.032 * happy * (1 + sprintAmount * 0.22) * motionScale;
-    const diveArc = Math.sin(Math.pow(keeperDiveAmount, 0.84) * Math.PI);
-    const diveLift = diveArc * (0.24 + keeperDiveHeight * 0.18) * motionScale;
+    const diveLift = (keeperDiveState?.lift ?? 0) * (0.3 + keeperDiveHeight * 0.24) * motionScale;
+    const diveSkid = (keeperDiveState?.skid ?? 0) * (0.05 + keeperDiveHeight * 0.025) * motionScale;
     const groundedKeeper = (keeperSetAmount > 0.02 || sideStepAmount > 0.02) && keeperDiveAmount <= 0.001;
-    runner.root.position.y = runner.baseY + (runner.groundOffset ?? 0) + (groundedKeeper || idleLock ? 0 : bounce) + jumpY * motionScale + diveLift - keeperSetAmount * 0.018 * motionScale;
+    runner.root.position.y = runner.baseY + (runner.groundOffset ?? 0) + (groundedKeeper || idleLock ? 0 : bounce) + jumpY * motionScale + diveLift - diveSkid - keeperSetAmount * 0.018 * motionScale;
     runner.torsoPivot.position.x = 0;
-    runner.leftLeg.rotation.x = THREE.MathUtils.lerp(swing, sideSwing * 0.28, sideStepAmount);
-    runner.rightLeg.rotation.x = THREE.MathUtils.lerp(-swing, -sideSwing * 0.28, sideStepAmount);
+    runner.leftLeg.rotation.x = THREE.MathUtils.lerp(locomotionSwing, sideSwing * 0.28, sideStepAmount);
+    runner.rightLeg.rotation.x = THREE.MathUtils.lerp(-locomotionSwing, -sideSwing * 0.28, sideStepAmount);
     runner.leftLeg.rotation.z = THREE.MathUtils.degToRad(sideStepDir * (10 + Math.sin(cycle) * 12) * sideStepAmount);
     runner.rightLeg.rotation.z = THREE.MathUtils.degToRad(sideStepDir * (-10 + Math.sin(cycle + Math.PI) * 12) * sideStepAmount);
     if (runner.leftLegRig && runner.rightLegRig) {
@@ -260,9 +301,13 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
         { leg: runner.rightLegRig, phase: cycle, side: -1 }
       ];
       athleteLegData.forEach(({ leg, phase, side }) => {
-        const stridePhase = Math.sin(phase);
+        const stridePhase = THREE.MathUtils.lerp(Math.sin(phase), -Math.sin(phase), backpedalAmount);
         let kneePitch = 11 + (1 - stridePhase) * (11 + athleteKneeLift * 3.2) * blend + sprintAmount * (3.8 + athleteKneeLift * 2.4 + Math.max(0, -stridePhase) * (2.2 + athleteKneeLift * 1.1));
         let anklePitch = -8 - Math.max(0, stridePhase) * (5.2 + athleteKneeLift * 1.2) * blend - (kneePitch - 11) * 0.18;
+        if (backpedalAmount > 0) {
+          kneePitch = THREE.MathUtils.lerp(kneePitch, 19 + (1 + stridePhase) * 7, backpedalAmount);
+          anklePitch = THREE.MathUtils.lerp(anklePitch, -4 - stridePhase * 4.5, backpedalAmount);
+        }
         if (sideStepAmount > 0) {
           const sidePhase = side === sideStepDir ? phase : phase + Math.PI * 0.5;
           kneePitch = THREE.MathUtils.lerp(kneePitch, 24 + (1 - Math.sin(sidePhase)) * 10, sideStepAmount);
@@ -272,8 +317,8 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
         leg.footPivot.rotation.x = THREE.MathUtils.degToRad(anklePitch);
       });
     }
-    runner.leftArm.rotation.x = -swing * (0.9 + sprintAmount * 0.18) - 0.08 - sprintAmount * 0.18;
-    runner.rightArm.rotation.x = swing * (0.9 + sprintAmount * 0.18) - 0.08 - sprintAmount * 0.18;
+    runner.leftArm.rotation.x = -locomotionSwing * (0.9 + sprintAmount * 0.18) - 0.08 - sprintAmount * 0.18;
+    runner.rightArm.rotation.x = locomotionSwing * (0.9 + sprintAmount * 0.18) - 0.08 - sprintAmount * 0.18;
     runner.leftArm.rotation.y = 0;
     runner.rightArm.rotation.y = 0;
     runner.leftArm.rotation.z = THREE.MathUtils.degToRad(7 + Math.sin(cycle * 0.5) * 4);
@@ -282,6 +327,12 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
     runner.torsoPivot.rotation.x = -0.08 - Math.abs(Math.sin(cycle)) * 0.04 * blend - sprintAmount * 0.18;
     runner.head.rotation.x = -0.04 * sprintAmount;
     runner.head.rotation.z = Math.sin(cycle * 0.58) * 0.06 * happy + Math.sin(cycle * 0.24) * 0.03 * sprintAmount;
+    if (backpedalAmount > 0) {
+      runner.torsoPivot.rotation.x = THREE.MathUtils.lerp(runner.torsoPivot.rotation.x, 0.03 - sprintAmount * 0.04, backpedalAmount);
+      runner.leftArm.rotation.z = THREE.MathUtils.lerp(runner.leftArm.rotation.z, THREE.MathUtils.degToRad(14), backpedalAmount * 0.45);
+      runner.rightArm.rotation.z = THREE.MathUtils.lerp(runner.rightArm.rotation.z, THREE.MathUtils.degToRad(-14), backpedalAmount * 0.45);
+      runner.head.rotation.x = THREE.MathUtils.lerp(runner.head.rotation.x, 0.02, backpedalAmount * 0.7);
+    }
     if (idleLock) {
       const idleBreathScale = runner.idleBreathScale ?? 0;
       const idleBreathPhase = runner.idleBreathPhase ?? 0;
@@ -320,27 +371,30 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
     if (runner.smile) runner.smile.rotation.z = idleLock ? 0 : Math.sin(cycle * 0.85) * 0.06;
 
     if (specialPose?.type === "keeperDive") {
-      const dive = THREE.MathUtils.clamp(specialPose.amount ?? 0, 0, 1);
       const dir = specialPose.dir === 0 ? 1 : Math.sign(specialPose.dir ?? 1);
+      const dive = keeperDiveState?.pose ?? 0;
+      const reach = keeperDiveState?.reach ?? dive;
+      const roll = keeperDiveState?.roll ?? dive;
+      const landing = keeperDiveState?.landing ?? 0;
       const leadArm = dir > 0 ? runner.leftArm : runner.rightArm;
       const trailArm = dir > 0 ? runner.rightArm : runner.leftArm;
       const leadLeg = dir > 0 ? runner.leftLeg : runner.rightLeg;
       const trailLeg = dir > 0 ? runner.rightLeg : runner.leftLeg;
-      runner.torsoPivot.position.x = dir * (0.15 + keeperDiveHeight * 0.08) * dive;
-      runner.torsoPivot.rotation.z += dir * 1.16 * dive;
-      runner.torsoPivot.rotation.x = -0.16 - (0.5 + keeperDiveHeight * 0.24) * dive;
-      runner.head.rotation.z += dir * 0.22 * dive;
-      runner.head.rotation.x = -(0.12 + keeperDiveHeight * 0.14) * dive;
-      leadArm.rotation.x = -(2.18 + keeperDiveHeight * 0.5) * dive;
-      leadArm.rotation.z = dir * (1.7 + keeperDiveHeight * 0.34) * dive;
-      leadArm.rotation.y = dir * 0.34 * dive;
-      trailArm.rotation.x = -(1.56 + keeperDiveHeight * 0.32) * dive;
-      trailArm.rotation.z = dir * (0.86 + keeperDiveHeight * 0.2) * dive;
-      trailArm.rotation.y = -dir * 0.22 * dive;
-      leadLeg.rotation.x = (0.22 + keeperDiveHeight * 0.44) * dive;
-      leadLeg.rotation.z = dir * (0.34 + keeperDiveHeight * 0.22) * dive;
-      trailLeg.rotation.x = -(1.14 + keeperDiveHeight * 0.32) * dive;
-      trailLeg.rotation.z = -dir * 0.34 * dive;
+      runner.torsoPivot.position.x = dir * ((0.12 + keeperDiveHeight * 0.06) * reach + (0.08 + keeperDiveHeight * 0.04) * landing);
+      runner.torsoPivot.rotation.z += dir * ((1.02 + keeperDiveHeight * 0.18) * roll + 0.18 * landing);
+      runner.torsoPivot.rotation.x = -0.14 - (0.44 + keeperDiveHeight * 0.22) * reach + landing * 0.14;
+      runner.head.rotation.z += dir * ((0.18 + keeperDiveHeight * 0.08) * roll + 0.06 * landing);
+      runner.head.rotation.x = -(0.1 + keeperDiveHeight * 0.12) * reach + landing * 0.05;
+      leadArm.rotation.x = -(2.16 + keeperDiveHeight * 0.58) * reach - landing * 0.12;
+      leadArm.rotation.z = dir * (1.78 + keeperDiveHeight * 0.42) * reach;
+      leadArm.rotation.y = dir * (0.38 + keeperDiveHeight * 0.18) * reach;
+      trailArm.rotation.x = -(1.46 + keeperDiveHeight * 0.28) * dive - landing * 0.2;
+      trailArm.rotation.z = dir * ((0.78 + keeperDiveHeight * 0.14) * dive + 0.18 * landing);
+      trailArm.rotation.y = -dir * (0.16 + keeperDiveHeight * 0.12) * dive;
+      leadLeg.rotation.x = (0.14 + keeperDiveHeight * 0.28) * reach - landing * 0.16;
+      leadLeg.rotation.z = dir * ((0.24 + keeperDiveHeight * 0.18) * dive + (0.34 + keeperDiveHeight * 0.12) * landing);
+      trailLeg.rotation.x = -(0.98 + keeperDiveHeight * 0.28) * dive + landing * 0.48;
+      trailLeg.rotation.z = -dir * (0.22 * dive) + dir * 0.18 * landing;
     }
 
     if (celebrationAmount > 0) {
@@ -367,7 +421,7 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
 
   const blend = THREE.MathUtils.clamp(speed / 2.1, 0, 1);
   const motionScale = runner.motionScale ?? 1;
-  const stride = Math.sin(cycle);
+  const stride = THREE.MathUtils.lerp(Math.sin(cycle), -Math.sin(cycle), backpedalAmount);
   const airBlend = THREE.MathUtils.clamp(Math.abs(jumpY) / Math.max(0.001, 0.36 * Math.max(1, motionScale)), 0, 1);
   const hurdlePose = THREE.MathUtils.smoothstep(airBlend, 0.04, 0.95);
   const sprintBlend = sprintAmount * (1 - hurdlePose * 0.72);
@@ -378,14 +432,14 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
   runner.root.position.y = runner.baseY + (runner.groundOffset ?? 0) + bounce + jumpY * motionScale + keeperDiveLift;
   runner.torsoPivot.position.x = 0.035 * hurdlePose + sideStepDir * 0.04 * sideStepAmount;
   runner.torsoPivot.rotation.z = Math.sin(cycle * 0.5) * 0.09 * blend + sideStepDir * 0.18 * sideStepAmount;
-  runner.torsoPivot.rotation.x = -0.1 - Math.abs(stride) * 0.06 * blend - blend * 0.04 - hurdlePose * 0.22 - sprintBlend * 0.16 + sideStepAmount * 0.05;
+  runner.torsoPivot.rotation.x = -0.1 - Math.abs(stride) * 0.06 * blend - blend * 0.04 - hurdlePose * 0.22 - sprintBlend * 0.16 + sideStepAmount * 0.05 + backpedalAmount * 0.18;
   if (runner.hips) {
     runner.hips.rotation.z = Math.sin(cycle) * 0.028 * blend + sideStepDir * 0.08 * sideStepAmount;
     runner.hips.rotation.y = Math.sin(cycle * 0.5) * (0.03 + sprintBlend * 0.018) * blend;
   }
   if (runner.head) {
     runner.head.position.y = 3.27 + hurdlePose * 0.04;
-    runner.head.rotation.x = -0.05 * sprintBlend;
+    runner.head.rotation.x = THREE.MathUtils.lerp(-0.05 * sprintBlend, 0.08, backpedalAmount * 0.8);
     runner.head.rotation.z = Math.sin(cycle * 0.32) * 0.025 * sprintBlend;
   }
   if (runner.mouth) {
@@ -398,11 +452,16 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
   ];
   armData.forEach(({ arm, side }) => {
     const walkPhase = side === -1 ? cycle + Math.PI : cycle;
-    const armSwing = Math.sin(walkPhase) * 18 * blend * (1 - airBlend * 0.65) * (1 + sprintBlend * 0.34);
+    const armPhase = THREE.MathUtils.lerp(Math.sin(walkPhase), -Math.sin(walkPhase), backpedalAmount);
+    const armSwing = armPhase * 18 * blend * (1 - airBlend * 0.65) * (1 + sprintBlend * 0.34);
     arm.upperPivot.rotation.z = THREE.MathUtils.degToRad(side * (16 + Math.sin(cycle * 0.5) * 2 + sprintBlend * 5));
     arm.upperPivot.rotation.x = THREE.MathUtils.degToRad(-(8 + 18 * airBlend + armSwing + sprintBlend * 12));
     arm.upperPivot.rotation.y = THREE.MathUtils.degToRad(side * (2.4 + sprintBlend * 4.6) * blend);
-    arm.lowerPivot.rotation.x = THREE.MathUtils.degToRad(-(14 + 18 * airBlend + Math.max(0, -Math.sin(walkPhase)) * 16 * blend + sprintBlend * 10));
+    arm.lowerPivot.rotation.x = THREE.MathUtils.degToRad(-(14 + 18 * airBlend + Math.max(0, -armPhase) * 16 * blend + sprintBlend * 10));
+    if (backpedalAmount > 0) {
+      arm.upperPivot.rotation.z = THREE.MathUtils.lerp(arm.upperPivot.rotation.z, THREE.MathUtils.degToRad(side * 21), backpedalAmount * 0.4);
+      arm.upperPivot.rotation.y = THREE.MathUtils.lerp(arm.upperPivot.rotation.y, THREE.MathUtils.degToRad(side * 6), backpedalAmount * 0.4);
+    }
     if (sideStepAmount > 0) {
       const sideArmSwing = Math.sin(walkPhase + Math.PI * 0.5) * 12 * sideStepAmount;
       arm.upperPivot.rotation.x = THREE.MathUtils.lerp(arm.upperPivot.rotation.x, THREE.MathUtils.degToRad(-18 + sideArmSwing * 0.35), sideStepAmount);
@@ -423,10 +482,16 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
   ];
   legData.forEach(({ leg, side }) => {
     const walkPhase = side === -1 ? cycle : cycle + Math.PI;
-    let hipPitch = Math.sin(walkPhase) * 24 * blend * (1 + sprintBlend * 0.18);
-    let kneePitch = 9 + (8 + 17 * ((-Math.sin(walkPhase) + 1) * 0.5)) * blend + sprintBlend * (3 + Math.max(0, -Math.sin(walkPhase)) * 5.5);
+    const walkPhaseSin = THREE.MathUtils.lerp(Math.sin(walkPhase), -Math.sin(walkPhase), backpedalAmount);
+    let hipPitch = walkPhaseSin * 24 * blend * (1 + sprintBlend * 0.18);
+    let kneePitch = 9 + (8 + 17 * ((-walkPhaseSin + 1) * 0.5)) * blend + sprintBlend * (3 + Math.max(0, -walkPhaseSin) * 5.5);
     let anklePitch = -6 - hipPitch * 0.34 - (kneePitch - 8) * 0.2 - sprintBlend * 1.5;
     let hipRoll = THREE.MathUtils.degToRad(side * (4.5 + Math.sin(cycle * 0.5) * 0.8) * blend);
+    if (backpedalAmount > 0) {
+      hipPitch = THREE.MathUtils.lerp(hipPitch, -7 + walkPhaseSin * 15, backpedalAmount);
+      kneePitch = THREE.MathUtils.lerp(kneePitch, 21 + (1 + walkPhaseSin) * 8, backpedalAmount);
+      anklePitch = THREE.MathUtils.lerp(anklePitch, -4 - walkPhaseSin * 7, backpedalAmount);
+    }
     if (airBlend > 0) {
       const leadLeg = side === leadSide;
       hipPitch = THREE.MathUtils.lerp(hipPitch, leadLeg ? 58 : -26, hurdlePose);

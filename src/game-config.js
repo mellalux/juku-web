@@ -28,6 +28,13 @@ export const TRACK_FINISH_X = TRACK_STRAIGHT_HALF - 1.2;
 export const TRACK_FINISH_PROGRESS = TRACK_FINISH_X + TRACK_STRAIGHT_HALF;
 export const FOOTBALL_FIELD_HALF_WIDTH = 16.2;
 export const FOOTBALL_FIELD_HALF_LENGTH = 24.2;
+export const JUKU_START_X = FOOTBALL_FIELD_HALF_WIDTH + 5.2;
+export const JUKU_START_Z = -7.8;
+export const TRACK_RACE_DIRECTION = -1;
+export const TRACK_RACE_FINISH_Z = JUKU_START_Z - 8.5;
+export const TRACK_RACE_FINISH_PROGRESS = TRACK_RACE_FINISH_Z + TRACK_STRAIGHT_HALF;
+export const TRACK_RACE_START_DISTANCE = 64.5;
+export const TRACK_RACE_START_PROGRESS = TRACK_RACE_FINISH_PROGRESS + TRACK_RACE_START_DISTANCE;
 export const FOOTBALL_CENTER_CIRCLE_RADIUS = 4.25;
 export const FOOTBALL_PLAYER_COUNT = 12;
 export const FOOTBALL_GOAL_WIDTH = 8.8;
@@ -52,8 +59,8 @@ export const GOAL_REPLAY_PLAYBACK_RATE = 0.28;
 export const GOAL_REPLAY_SHOW_TIME = 6.2;
 export const ARCADE_SCORING_BOOST = 1.16;
 export const ARCADE_KEEPER_NERF = 0.78;
-export const TRACK_RUNNER_COUNT = 5;
-export const TRACK_HURDLE_COUNT = 16;
+export const TRACK_RUNNER_COUNT = 8;
+export const TRACK_HURDLE_COUNT = 12;
 export const TRACK_RUNNER_HURDLE_JUMP_VELOCITY = 5.2;
 export const TRACK_RUNNER_HURDLE_CLEARANCE_Y = 0.9;
 export const TRACK_RUNNER_HURDLE_IMPACT_LIFT = 1.6;
@@ -151,24 +158,6 @@ export const FOOTBALL_ROLE_LABELS = {
   midfielder: "Midfielder",
   attacker: "Attacker"
 };
-export const FOOTBALL_TEAM_DATA = {
-  red: [
-    { number: 1, name: "Markus Saar", role: "keeper", positionLabel: "Goalkeeper", preferredFoot: "right", trait: "reflex", speedProfile: "balanced" },
-    { number: 4, name: "Karl Tamm", role: "defender", positionLabel: "Center Back", preferredFoot: "right", trait: "tackle", speedProfile: "balanced" },
-    { number: 17, name: "Rene Kask", role: "defender", positionLabel: "Full Back", preferredFoot: "left", trait: "press", speedProfile: "fast" },
-    { number: 9, name: "Artur Lepp", role: "attacker", positionLabel: "Left Forward", preferredFoot: "left", trait: "dribble", attackProfile: "playmaker", speedProfile: "fast" },
-    { number: 11, name: "Martin Kuusk", role: "attacker", positionLabel: "Striker", preferredFoot: "right", trait: "finish", attackProfile: "poacher", speedProfile: "balanced" },
-    { number: 27, name: "Sander Oja", role: "attacker", positionLabel: "Right Forward", preferredFoot: "right", trait: "pace", attackProfile: "runner", speedProfile: "sprinter" }
-  ],
-  blue: [
-    { number: 1, name: "Rasmus Kivi", role: "keeper", positionLabel: "Goalkeeper", preferredFoot: "right", trait: "reflex", speedProfile: "balanced" },
-    { number: 5, name: "Oliver Kask", role: "defender", positionLabel: "Center Back", preferredFoot: "right", trait: "mark", speedProfile: "balanced" },
-    { number: 14, name: "Mark Randel", role: "defender", positionLabel: "Full Back", preferredFoot: "left", trait: "intercept", speedProfile: "fast" },
-    { number: 19, name: "Mihkel Aron", role: "attacker", positionLabel: "Left Forward", preferredFoot: "left", trait: "dribble", attackProfile: "playmaker", speedProfile: "fast" },
-    { number: 51, name: "Lucas Nikolas", role: "attacker", positionLabel: "Striker", preferredFoot: "right", trait: "finish", attackProfile: "poacher", speedProfile: "balanced" },
-    { number: 7, name: "Teodor Oliver", role: "attacker", positionLabel: "Right Forward", preferredFoot: "right", trait: "pace", attackProfile: "runner", speedProfile: "sprinter" }
-  ]
-};
 
 export function createInitialState() {
   return {
@@ -182,8 +171,8 @@ export function createInitialState() {
     crouchBlend: 0,
     pushBlend: 0,
     airBlend: 0,
-    x: FOOTBALL_FIELD_HALF_WIDTH + 5.2,
-    z: -7.8,
+    x: JUKU_START_X,
+    z: JUKU_START_Z,
     yaw: -115,
     walkCycle: 0,
     walkBlend: 0,
@@ -206,10 +195,10 @@ export function createInitialState() {
     cam2Yaw: 0.678,
     cam2Distance: 9.25,
     cam2Height: 4.17,
-    cam2PrevX: FOOTBALL_FIELD_HALF_WIDTH + 5.2,
-    cam2PrevZ: -7.8,
-    cam2FocusX: FOOTBALL_FIELD_HALF_WIDTH + 5.2,
-    cam2FocusZ: -7.8,
+    cam2PrevX: JUKU_START_X,
+    cam2PrevZ: JUKU_START_Z,
+    cam2FocusX: JUKU_START_X,
+    cam2FocusZ: JUKU_START_Z,
     cam2Motion: 0,
     cam2CloseUp: false,
     cam3Side: 1,
@@ -245,6 +234,7 @@ export function createInitialState() {
     goalReplay: null,
     pauseFootball: false,
     pauseTrack: false,
+    trackTimer: 0,
     lastT: performance.now()
   };
 }

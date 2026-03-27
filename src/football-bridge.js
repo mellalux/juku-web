@@ -200,16 +200,16 @@ export function createFootballBridge({
     }
     game.lastTouchPlayer = player;
     game.firstTouchPlayer = player;
-    game.firstTouchTimer = player ? 0.3 : 0;
+    game.firstTouchTimer = player ? 0.38 : 0;
     game.touchShieldPlayer = player;
-    game.touchShieldTimer = player ? 0.42 : 0;
+    game.touchShieldTimer = player ? 0.58 : 0;
     game.duelControlPlayer = player;
-    game.duelControlTimer = player && player.role !== "keeper" ? (switchedTeam ? 0.34 : 0.24) : 0;
-    game.contestTouchTimer = switchedTeam ? 0.3 : Math.max(game.contestTouchTimer ?? 0, 0);
+    game.duelControlTimer = player && player.role !== "keeper" ? (switchedTeam ? 0.46 : 0.34) : 0;
+    game.contestTouchTimer = switchedTeam ? 0.38 : Math.max(game.contestTouchTimer ?? 0, 0);
     game.contestOwnerPlayer = player;
-    game.contestOwnerTimer = player && player.role !== "keeper" ? (switchedTeam ? 0.36 : 0.18) : 0;
+    game.contestOwnerTimer = player && player.role !== "keeper" ? (switchedTeam ? 0.54 : 0.3) : 0;
     game.contestHardLockTimer = switchedTeam && player && player.role !== "keeper"
-      ? 0.42
+      ? 0.58
       : Math.max(game.contestHardLockTimer ?? 0, 0);
   }
 
@@ -249,39 +249,67 @@ export function createFootballBridge({
     const scaledPower = power * FOOTBALL_BALL_SPEED_SCALE * 1.16;
     game.ballVel.x = (dx / len) * scaledPower;
     game.ballVel.z = (dz / len) * scaledPower;
-    game.ballVel.y = loft * 1.12;
+    const loftScale = loft > 2.6
+      ? 1.52
+      : loft > 1.4
+        ? 1.34
+        : 1.12;
+    game.ballVel.y = loft * loftScale;
+  }
+
+  function resolveFootballRestartTeam(game) {
+    const candidates = [
+      -(game.lastTouchTeam ?? 0),
+      -(game.lastControllingTeam ?? 0),
+      -(game.attackingTeam ?? 0),
+      1
+    ];
+    for (let i = 0; i < candidates.length; i += 1) {
+      const team = Math.sign(candidates[i] || 0);
+      if (team !== 0) return team;
+    }
+    return 1;
   }
 
   function startFootballRefRestart(game, outX, outZ) {
     if (game.refRestart?.active) return;
-    game.restartTeam = 0;
-    game.kickoffPlacementMode = "live";
-    game.refRestart = {
-      active: true,
-      phase: "toBall",
-      kind: "boundary",
-      ballX: outX,
-      ballZ: outZ,
-      placeX: 0,
-      placeZ: 0,
-      timer: 0
-    };
-    game.ball.visible = true;
-    game.ball.position.set(outX, Math.max(FOOTBALL_BALL_RADIUS, game.ball.position.y), outZ);
-    game.ballVel.set(0, 0, 0);
+    const restartTeamCandidate = resolveFootballRestartTeam(game);
+    const liveBallY = game.ball.position.y;
+    const liveBallVelX = game.ballVel.x;
+    const liveBallVelY = game.ballVel.y;
+    const liveBallVelZ = game.ballVel.z;
     game.ballHolder = null;
     game.deliveryType = null;
     game.deliveryTeam = 0;
     game.deliveryTimer = 0;
     game.deliverySource = null;
     game.deliveryTarget = null;
+    game.stallTeam = 0;
+    game.stallTimer = 0;
+    game.goalmouthStallTimer = 0;
+    game.ownGoalScrambleTimer = 0;
+    game.looseBallStallTimer = 0;
+    game.offBallClusterTimer = 0;
     game.restartHoldTimer = 0;
     game.kickoffScriptTimer = 0;
     game.kickoffContestTimer = 0;
     game.outOfBoundsTimer = 0;
-    if (game.coach) {
-      game.coach.whistleTimer = Math.max(game.coach.whistleTimer ?? 0, 0.58);
-    }
+    game.firstTouchPlayer = null;
+    game.firstTouchTimer = 0;
+    game.touchShieldPlayer = null;
+    game.touchShieldTimer = 0;
+    game.duelControlPlayer = null;
+    game.duelControlTimer = 0;
+    game.contestTouchTimer = 0;
+    game.contestOwnerPlayer = null;
+    game.contestOwnerTimer = 0;
+    game.contestHardLockTimer = 0;
+    game.kickoffBallSpot = { x: outX, z: outZ };
+    game.kickoffTeam = restartTeamCandidate;
+    resetFootballKickoff(game, false, false);
+    game.ball.visible = true;
+    game.ball.position.set(outX, Math.max(FOOTBALL_BALL_RADIUS, liveBallY), outZ);
+    game.ballVel.set(liveBallVelX, liveBallVelY, liveBallVelZ);
   }
 
   function findBestPassTarget(carrier, teammates, opponents) {
@@ -300,8 +328,8 @@ export function createFootballBridge({
     return findClearanceTargetAI(carrier, teammates, opponents);
   }
 
-  function resolvePeopleCollisions(game = footballGame) {
-    resolvePeopleCollisionsRuntime(game, state, {
+  function resolvePeopleCollisions(game = footballGame, dt = 0) {
+    resolvePeopleCollisionsRuntime(game, state, dt, {
       colliders: footballGame.colliders,
       clampFootballHumanPosition,
       clampFootballRefereePosition,

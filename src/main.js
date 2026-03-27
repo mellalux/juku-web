@@ -4,8 +4,8 @@ async function startAppBootstrap() {
   if (!appBootstrapPromise) {
     document.documentElement.dataset.appBootState = "loading";
     appBootstrapPromise = import("./app-bootstrap.js")
-      .then(({ bootApp }) => {
-        bootApp();
+      .then(async ({ bootApp }) => {
+        await bootApp();
         document.documentElement.dataset.appBootState = "ready";
       })
       .catch((error) => {

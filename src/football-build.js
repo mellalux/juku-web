@@ -7,14 +7,15 @@ import {
   FOOTBALL_GOAL_HEIGHT,
   FOOTBALL_GOAL_WIDTH,
   FOOTBALL_PLAYER_COUNT,
-  FOOTBALL_TEAM_DATA,
   HAIR_COLOR_VARIANTS,
   HAIR_STYLE_VARIANTS,
   TRACK_100M_START_X,
-  TRACK_FINISH_PROGRESS,
   TRACK_FINISH_X,
   TRACK_HURDLE_COUNT,
   TRACK_HURDLE_SCALE,
+  TRACK_LANE_COUNT,
+  TRACK_RACE_DIRECTION,
+  TRACK_RACE_START_PROGRESS,
   TRACK_RUNNER_COUNT
 } from "./game-config.js";
 import {
@@ -22,6 +23,7 @@ import {
   getFootballTraitModifiers,
   normalizeFootballRosterEntry
 } from "./football-helpers.js";
+import { DEFAULT_FOOTBALL_TEAM_DATA } from "./football-roster-data.js";
 import { getFootballPerimeterTFromPoint } from "./football-referee-runtime.js";
 import {
   makeFootballNameTag,
@@ -121,7 +123,7 @@ function pushAnchoredFootballInstances(target, anchorMatrix, transforms) {
   }
 }
 
-export function buildFootballGame() {
+export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
   const group = new THREE.Group();
 
   const ball = new THREE.Mesh(
@@ -289,8 +291,9 @@ export function buildFootballGame() {
   for (let i = 0; i < FOOTBALL_PLAYER_COUNT; i += 1) {
     const team = i < perTeam ? 1 : -1;
     const teamName = team === 1 ? "red" : "blue";
+    const teamRoster = Array.isArray(teamData?.[teamName]) ? teamData[teamName] : DEFAULT_FOOTBALL_TEAM_DATA[teamName];
     const lane = i % perTeam;
-    const rosterEntry = normalizeFootballRosterEntry(FOOTBALL_TEAM_DATA[teamName][lane], teamName, lane);
+    const rosterEntry = normalizeFootballRosterEntry(teamRoster[lane], teamName, lane);
     const role = rosterEntry.role;
     const homeX = rosterEntry.homeX ?? (homeXByLane[lane] ?? 0);
     const defaultHomeZ = role === "keeper"
@@ -444,18 +447,20 @@ export function buildFootballGame() {
       hairStyle: HAIR_STYLE_VARIANTS[(i + 1) % HAIR_STYLE_VARIANTS.length],
       runnerStyle: "athlete"
     }));
-    const laneIndex = 0;
-    const progress = (TRACK_FINISH_PROGRESS + i * 6.6) % innerLaneLength;
+    const laneIndex = i % TRACK_LANE_COUNT;
+    const progress = TRACK_RACE_START_PROGRESS;
     const point = getTrackPointAtProgress(laneIndex, progress);
+    const dir = TRACK_RACE_DIRECTION;
     const speed = 2.02 + i * 0.13 + Math.random() * 0.16;
     runner.root.position.set(point.x, runner.baseY, point.z);
-    runner.root.rotation.y = Math.atan2(-point.dirX, -point.dirZ);
+    runner.root.rotation.y = Math.atan2(point.dirX * dir, point.dirZ * dir);
     group.add(runner.root);
     trackRunners.push({
       runner,
+      homeLaneIndex: laneIndex,
       laneIndex,
       targetLaneIndex: laneIndex,
-      dir: -1,
+      dir,
       progress,
       speed,
       currentSpeed: speed,
@@ -468,64 +473,69 @@ export function buildFootballGame() {
   }
 
   const hurdles = [];
-  const hurdleLane = 0;
-  const hurdleLaneLength = getTrackLaneLength(hurdleLane);
-  const hurdleSpacing = hurdleLaneLength / Math.max(1, TRACK_HURDLE_COUNT);
+  const hurdleSpacing = innerLaneLength / Math.max(1, TRACK_HURDLE_COUNT);
   const hurdleProgresses = [];
+  const hurdleInstanceCount = TRACK_HURDLE_COUNT * TRACK_LANE_COUNT;
   const hurdleVisuals = {
     leftLegs: createInstancedMesh({
       geometry: getSharedBoxGeometry(0.06, 0.34, 0.06),
       material: getSharedStandardMaterial(0xf3f4f6),
-      count: TRACK_HURDLE_COUNT
+      count: hurdleInstanceCount
     }),
     rightLegs: createInstancedMesh({
       geometry: getSharedBoxGeometry(0.06, 0.34, 0.06),
       material: getSharedStandardMaterial(0xf3f4f6),
-      count: TRACK_HURDLE_COUNT
+      count: hurdleInstanceCount
     }),
     bars: createInstancedMesh({
       geometry: getSharedBoxGeometry(0.74, 0.065, 0.065),
       material: getSharedStandardMaterial(0xcf3f4f),
-      count: TRACK_HURDLE_COUNT
+      count: hurdleInstanceCount
     }),
     leftOffset: FOOTBALL_HURDLE_LEFT_OFFSET,
     rightOffset: FOOTBALL_HURDLE_RIGHT_OFFSET,
     barOffset: FOOTBALL_HURDLE_BAR_OFFSET
   };
   for (let i = 0; i < TRACK_HURDLE_COUNT; i += 1) {
-    hurdleProgresses.push((TRACK_FINISH_PROGRESS + hurdleSpacing * (i + 0.5)) % hurdleLaneLength);
+    hurdleProgresses.push(
+      ((TRACK_RACE_START_PROGRESS - hurdleSpacing * (i + 0.5)) % innerLaneLength + innerLaneLength) % innerLaneLength
+    );
   }
-  for (let i = 0; i < hurdleProgresses.length; i += 1) {
-    const progress = hurdleProgresses[i];
-    const hurdlePoint = getTrackPointAtProgress(hurdleLane, progress);
-    const hurdle = new THREE.Group();
+  let hurdleIndex = 0;
+  for (let laneIndex = 0; laneIndex < TRACK_LANE_COUNT; laneIndex += 1) {
+    for (let i = 0; i < hurdleProgresses.length; i += 1) {
+      const progress = hurdleProgresses[i];
+      const hurdlePoint = getTrackPointAtProgress(laneIndex, progress);
+      const hurdle = new THREE.Group();
 
-    hurdle.position.set(hurdlePoint.x, 0.015, hurdlePoint.z);
-    hurdle.rotation.y = Math.atan2(hurdlePoint.dirX, hurdlePoint.dirZ);
-    hurdle.scale.setScalar(TRACK_HURDLE_SCALE);
-    group.add(hurdle);
-    setAnchoredInstanceTransform(hurdleVisuals.leftLegs, i, hurdle, { position: FOOTBALL_HURDLE_LEFT_OFFSET });
-    setAnchoredInstanceTransform(hurdleVisuals.rightLegs, i, hurdle, { position: FOOTBALL_HURDLE_RIGHT_OFFSET });
-    setAnchoredInstanceTransform(hurdleVisuals.bars, i, hurdle, { position: FOOTBALL_HURDLE_BAR_OFFSET });
-    const collider = { type: "obb", x: hurdle.position.x, z: hurdle.position.z, halfX: 0.46 * TRACK_HURDLE_SCALE, halfZ: 0.12 * TRACK_HURDLE_SCALE, yaw: hurdle.rotation.y };
-    colliders.push(collider);
-    hurdles.push({
-      index: i,
-      laneIndex: hurdleLane,
-      progress,
-      mesh: hurdle,
-      collider,
-      fallen: false,
-      fallProgress: 0,
-      resetTimer: 0,
-      tipDir: 0,
-      baseY: 0.015,
-      baseHalfX: 0.46 * TRACK_HURDLE_SCALE,
-      baseHalfZ: 0.12 * TRACK_HURDLE_SCALE,
-      barCenterY: 0.015 + 0.335 * TRACK_HURDLE_SCALE,
-      barHalfHeight: 0.0325 * TRACK_HURDLE_SCALE,
-      barHalfWidth: 0.37 * TRACK_HURDLE_SCALE
-    });
+      hurdle.position.set(hurdlePoint.x, 0.015, hurdlePoint.z);
+      hurdle.rotation.y = Math.atan2(hurdlePoint.dirX, hurdlePoint.dirZ);
+      hurdle.scale.setScalar(TRACK_HURDLE_SCALE);
+      group.add(hurdle);
+      setAnchoredInstanceTransform(hurdleVisuals.leftLegs, hurdleIndex, hurdle, { position: FOOTBALL_HURDLE_LEFT_OFFSET });
+      setAnchoredInstanceTransform(hurdleVisuals.rightLegs, hurdleIndex, hurdle, { position: FOOTBALL_HURDLE_RIGHT_OFFSET });
+      setAnchoredInstanceTransform(hurdleVisuals.bars, hurdleIndex, hurdle, { position: FOOTBALL_HURDLE_BAR_OFFSET });
+      const collider = { type: "obb", x: hurdle.position.x, z: hurdle.position.z, halfX: 0.46 * TRACK_HURDLE_SCALE, halfZ: 0.12 * TRACK_HURDLE_SCALE, yaw: hurdle.rotation.y };
+      colliders.push(collider);
+      hurdles.push({
+        index: hurdleIndex,
+        laneIndex,
+        progress,
+        mesh: hurdle,
+        collider,
+        fallen: false,
+        fallProgress: 0,
+        resetTimer: 0,
+        tipDir: 0,
+        baseY: 0.015,
+        baseHalfX: 0.46 * TRACK_HURDLE_SCALE,
+        baseHalfZ: 0.12 * TRACK_HURDLE_SCALE,
+        barCenterY: 0.015 + 0.335 * TRACK_HURDLE_SCALE,
+        barHalfHeight: 0.0325 * TRACK_HURDLE_SCALE,
+        barHalfWidth: 0.37 * TRACK_HURDLE_SCALE
+      });
+      hurdleIndex += 1;
+    }
   }
   commitInstancedMesh(hurdleVisuals.leftLegs);
   commitInstancedMesh(hurdleVisuals.rightLegs);

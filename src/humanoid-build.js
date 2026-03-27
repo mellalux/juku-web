@@ -71,22 +71,57 @@ export function addHumanoidTorso(parent, palette) {
   );
   belly.rotation.x = THREE.MathUtils.degToRad(8);
 
-  addScaledPart(
+  const collar = addScaledPart(
     parent,
-    getSharedSphereGeometry(0.15, 18, 14),
-    shirtBase,
-    new THREE.Vector3(-0.2, 0.27, 0.02),
-    new THREE.Vector3(0.94, 0.78, 1)
+    getSharedCapsuleGeometry(0.085, 0.24, 7, 18),
+    shirtBright,
+    new THREE.Vector3(0, 0.31, 0.03),
+    new THREE.Vector3(1, 1, 0.92),
+    new THREE.Euler(0, 0, Math.PI / 2)
   );
-  addScaledPart(
-    parent,
-    getSharedSphereGeometry(0.15, 18, 14),
-    shirtBase,
-    new THREE.Vector3(0.2, 0.27, 0.02),
-    new THREE.Vector3(0.94, 0.78, 1)
-  );
+  collar.rotation.x = THREE.MathUtils.degToRad(-4);
 
-  return { upperTorso, lowerTorso, chest, belly };
+  const leftShoulder = addScaledPart(
+    parent,
+    getSharedSphereGeometry(0.13, 18, 14),
+    shirtBright,
+    new THREE.Vector3(0.28, 0.3, 0.025),
+    new THREE.Vector3(1.12, 0.84, 1.06)
+  );
+  leftShoulder.rotation.z = THREE.MathUtils.degToRad(-8);
+
+  const rightShoulder = addScaledPart(
+    parent,
+    getSharedSphereGeometry(0.13, 18, 14),
+    shirtBright,
+    new THREE.Vector3(-0.28, 0.3, 0.025),
+    new THREE.Vector3(1.12, 0.84, 1.06)
+  );
+  rightShoulder.rotation.z = THREE.MathUtils.degToRad(8);
+
+  [
+    upperTorso,
+    lowerTorso,
+    chest,
+    belly,
+    collar,
+    leftShoulder,
+    rightShoulder
+  ].forEach((part) => {
+    part.userData.shirtRegion = true;
+  });
+
+  return {
+    upperTorso,
+    lowerTorso,
+    chest,
+    belly,
+    collar,
+    leftShoulder,
+    rightShoulder,
+    leftShoulderAnchor: new THREE.Vector3(0.345, 0.305, 0.03),
+    rightShoulderAnchor: new THREE.Vector3(-0.345, 0.305, 0.03)
+  };
 }
 
 export function addHumanoidHips(parent, color, pos) {

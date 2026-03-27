@@ -39,6 +39,8 @@ export function getFootballRefereeTargetRuntime(game, { clampFootballRefereePosi
     const restart = game.refRestart;
     const target = restart.phase === "toBall"
       ? { x: restart.ballX, z: restart.ballZ }
+      : restart.phase === "clear"
+        ? { x: restart.clearX ?? restart.placeX, z: restart.clearZ ?? restart.placeZ }
       : { x: restart.placeX, z: restart.placeZ };
     coach.targetX = target.x;
     coach.targetZ = target.z;

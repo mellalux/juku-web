@@ -3,6 +3,9 @@ import {
   FOOTBALL_CENTER_CIRCLE_RADIUS,
   FOOTBALL_FIELD_HALF_LENGTH,
   FOOTBALL_FIELD_HALF_WIDTH,
+  TRACK_RACE_DIRECTION,
+  TRACK_RACE_FINISH_Z,
+  TRACK_RACE_START_PROGRESS,
   TRACK_CURVE_INNER_RADIUS,
   TRACK_CURVE_OUTER_RADIUS,
   TRACK_LANE_COUNT,
@@ -11,11 +14,14 @@ import {
 } from "./game-config.js";
 import { createStaticInstancedMesh } from "./instanced-build.js";
 import {
+  getSharedBoxGeometry,
   getSharedCircleGeometry,
   getSharedCylinderGeometry,
   getSharedPlaneGeometry
 } from "./shared-geometry.js";
 import { getSharedStandardMaterial } from "./shared-materials.js";
+
+const trackLaneNumberMaterialCache = new Map();
 
 function getTrackLaneRadius(laneIndex) {
   return TRACK_CURVE_INNER_RADIUS + TRACK_LANE_WIDTH * (laneIndex + 0.5);
@@ -129,8 +135,51 @@ function makeStadiumShape(innerRadius, outerRadius) {
   return shape;
 }
 
+function getTrackLaneNumberMaterial(text) {
+  let material = trackLaneNumberMaterialCache.get(text);
+  if (material) return material;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "bold 206px Trebuchet MS";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 6);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  material = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    alphaTest: 0.08,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  trackLaneNumberMaterialCache.set(text, material);
+  return material;
+}
+
+function buildTrackLaneNumber(text, x, z) {
+  const number = new THREE.Mesh(
+    getSharedPlaneGeometry(1.25, 1.25),
+    getTrackLaneNumberMaterial(text)
+  );
+  number.rotation.x = -Math.PI / 2;
+  number.rotation.z = 0;
+  number.position.set(x, 0.031, z);
+  number.renderOrder = 3;
+  return number;
+}
+
 const TRACK_SURFACE_MATERIAL = new THREE.MeshStandardMaterial({ color: 0xad4f3b, roughness: 0.9 });
 const TRACK_CURB_MATERIAL = getSharedStandardMaterial(0xf0f3ea, 0.9);
+const TRACK_FINISH_LINE_MATERIAL = getSharedStandardMaterial(0xf8fafc, 0.82);
+const TRACK_START_BLOCK_RAIL_MATERIAL = getSharedStandardMaterial(0xcbd5e1, 0.74);
+const TRACK_START_BLOCK_PAD_MATERIAL = getSharedStandardMaterial(0x1f2937, 0.92);
 const FOOTBALL_FIELD_MARK_MATERIAL = getSharedStandardMaterial(0xeef7eb, 0.9);
 const FOOTBALL_PITCH_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x2f8f3d, roughness: 1 });
 const TRACK_LANE_LINE_MATERIAL = new THREE.LineBasicMaterial({ color: 0xf7efe1, transparent: true, opacity: 0.82 });
@@ -165,6 +214,58 @@ const TRACK_CURB_OUTER_GEOMETRY = new THREE.ShapeGeometry(
   makeStadiumShape(TRACK_CURVE_OUTER_RADIUS, TRACK_CURVE_OUTER_RADIUS + 0.18),
   48
 );
+const TRACK_FINISH_LINE_WIDTH = TRACK_CURVE_OUTER_RADIUS - TRACK_CURVE_INNER_RADIUS;
+const TRACK_FINISH_LINE_CENTER_X = (TRACK_CURVE_OUTER_RADIUS + TRACK_CURVE_INNER_RADIUS) * 0.5;
+const TRACK_FINISH_LINE_Z = TRACK_RACE_FINISH_Z;
+const TRACK_FINISH_LINE_DEPTH = 0.34;
+const TRACK_START_MARK_HALF_WIDTH = TRACK_LANE_WIDTH * 0.42;
+const TRACK_START_BLOCK_BACK_OFFSET = 0.72;
+const TRACK_LANE_NUMBER_Z = TRACK_FINISH_LINE_Z - 1.85;
+
+function buildTrackStartBlock(x, z, yaw) {
+  const block = new THREE.Group();
+  block.position.set(x, 0.022, z);
+  block.rotation.y = yaw;
+
+  const rail = new THREE.Mesh(
+    getSharedBoxGeometry(0.24, 0.03, 0.56),
+    TRACK_START_BLOCK_RAIL_MATERIAL
+  );
+  rail.position.set(0, 0.015, 0);
+  block.add(rail);
+
+  const rearPad = new THREE.Mesh(
+    getSharedBoxGeometry(0.12, 0.028, 0.18),
+    TRACK_START_BLOCK_PAD_MATERIAL
+  );
+  rearPad.position.set(-0.07, 0.078, -0.07);
+  rearPad.rotation.x = THREE.MathUtils.degToRad(-58);
+  block.add(rearPad);
+
+  const frontPad = new THREE.Mesh(
+    getSharedBoxGeometry(0.12, 0.028, 0.18),
+    TRACK_START_BLOCK_PAD_MATERIAL
+  );
+  frontPad.position.set(0.07, 0.07, 0.08);
+  frontPad.rotation.x = THREE.MathUtils.degToRad(-50);
+  block.add(frontPad);
+
+  return block;
+}
+
+function buildTrackStartMark(point, dir) {
+  const moveDirX = point.dirX * dir;
+  const moveDirZ = point.dirZ * dir;
+  const normalX = -moveDirZ;
+  const normalZ = moveDirX;
+  return new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(point.x - normalX * TRACK_START_MARK_HALF_WIDTH, 0.034, point.z - normalZ * TRACK_START_MARK_HALF_WIDTH),
+      new THREE.Vector3(point.x + normalX * TRACK_START_MARK_HALF_WIDTH, 0.034, point.z + normalZ * TRACK_START_MARK_HALF_WIDTH)
+    ]),
+    TRACK_LANE_LINE_MATERIAL
+  );
+}
 
 const TRACK_LANE_LINE_GEOMETRIES = [];
 for (let lane = 1; lane < TRACK_LANE_COUNT; lane += 1) {
@@ -309,6 +410,32 @@ export function buildRunningTrack() {
 
   for (let i = 0; i < TRACK_LANE_LINE_GEOMETRIES.length; i += 1) {
     group.add(new THREE.Line(TRACK_LANE_LINE_GEOMETRIES[i], TRACK_LANE_LINE_MATERIAL));
+  }
+
+  const finishLineBase = new THREE.Mesh(
+    getSharedPlaneGeometry(TRACK_FINISH_LINE_WIDTH, TRACK_FINISH_LINE_DEPTH),
+    TRACK_FINISH_LINE_MATERIAL
+  );
+  finishLineBase.rotation.x = -Math.PI / 2;
+  finishLineBase.position.set(TRACK_FINISH_LINE_CENTER_X, 0.03, TRACK_FINISH_LINE_Z);
+  group.add(finishLineBase);
+
+  for (let lane = 0; lane < TRACK_LANE_COUNT; lane += 1) {
+    const startPoint = getTrackPointAtProgress(lane, TRACK_RACE_START_PROGRESS);
+    const moveDirX = startPoint.dirX * TRACK_RACE_DIRECTION;
+    const moveDirZ = startPoint.dirZ * TRACK_RACE_DIRECTION;
+    const blockX = startPoint.x - moveDirX * TRACK_START_BLOCK_BACK_OFFSET;
+    const blockZ = startPoint.z - moveDirZ * TRACK_START_BLOCK_BACK_OFFSET;
+    const blockYaw = Math.atan2(moveDirX, moveDirZ);
+    group.add(buildTrackStartMark(startPoint, TRACK_RACE_DIRECTION));
+    group.add(buildTrackStartBlock(blockX, blockZ, blockYaw));
+    group.add(
+      buildTrackLaneNumber(
+        `${lane + 1}`,
+        getTrackLaneRadius(lane),
+        TRACK_LANE_NUMBER_Z
+      )
+    );
   }
 
   const pitch = new THREE.Mesh(
