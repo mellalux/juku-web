@@ -180,6 +180,18 @@ At startup, the app normalizes that JSON and randomly picks a red team and a blu
 
 If you want to tweak the cast, team branding, roster names, or the matchup pool itself, this JSON file is the first place to edit.
 
+## Common Customizations
+
+| What you want to change | Where to edit |
+| --- | --- |
+| Team names, player rosters, runner names, Juku colors | `public/data/world-character-data.json` |
+| Physics values, camera defaults, replay timing, football behavior preset | `src/game-config.js` |
+| Page title, social metadata, install metadata link tags | `index.html` |
+| PWA install name, orientation, start URL, scope, icon paths | `public/manifest.webmanifest` |
+| Build chunking strategy | `vite.config.js` |
+
+The football behavior system already defines both `arcade` and `realistic` presets in `src/game-config.js`, with `arcade` currently set as the default preset for new sessions.
+
 ## PWA and Versioning
 
 The app version lives in `package.json` under `"version"`. That version is reused across the PWA and deployment flow.
@@ -197,6 +209,15 @@ During `npm run build`:
 3. `scripts/finalize-pwa-build.mjs` rewrites `dist/sw.js` so `PRECACHE_URLS` contains the actual built asset filenames, including hashed files in `dist/assets/`.
 
 When cached assets change, bumping the app version is the intended way to roll the service worker cache forward.
+
+### Offline Behavior
+
+The generated service worker:
+
+- precaches the public app shell and generated build assets
+- serves cached same-origin `GET` requests when available
+- falls back to `/` or `/index.html` for navigation requests when the network is unavailable
+- deletes old versioned caches during activation
 
 ## Deployment Notes
 
@@ -244,6 +265,9 @@ For the current production setup, these URLs should resolve successfully after d
 - `index.html` includes Open Graph and Twitter card metadata for `https://juku.mella.ee/`
 - The current build assumes root hosting rather than a nested subpath
 - The production service worker is only registered in `import.meta.env.PROD`
+- `public/manifest.webmanifest` currently uses `/` for `id`, `start_url`, and `scope`, and root-relative icon paths under `/app-icons/`
+
+If you move this app off the production root domain, update `index.html`, `public/manifest.webmanifest`, and any related deployment/base-path assumptions together.
 
 ## Development Notes
 
