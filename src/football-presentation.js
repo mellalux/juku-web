@@ -11,9 +11,9 @@ import {
   GOAL_REPLAY_DELAY,
   GOAL_REPLAY_PLAYBACK_RATE,
   GOAL_REPLAY_SAMPLE_INTERVAL,
-  GOAL_REPLAY_SHOW_TIME,
-  TEAM_DISPLAY_NAMES
+  GOAL_REPLAY_SHOW_TIME
 } from "./game-config.js";
+import { getFootballTeamData } from "./football-helpers.js";
 
 const GOAL_REPLAY_CAMERA_SETUP = {
   lookX: 0,
@@ -96,6 +96,26 @@ export function setElementStylePropertyIfChanged(element, propertyName, value) {
   element.style[propertyName] = value;
 }
 
+function setRootCssVariableIfChanged(name, value) {
+  if (!value) return;
+  const rootStyle = document.documentElement.style;
+  if (rootStyle.getPropertyValue(name) === value) return;
+  rootStyle.setProperty(name, value);
+}
+
+export function applyFootballTeamPresentation(teamData, { redTeamLabel, blueTeamLabel } = {}) {
+  const redTeam = teamData?.red ?? null;
+  const blueTeam = teamData?.blue ?? null;
+  setElementTextIfChanged(redTeamLabel, redTeam?.name ?? "Team A");
+  setElementTextIfChanged(blueTeamLabel, blueTeam?.name ?? "Team B");
+  setRootCssVariableIfChanged("--team-red-scoreboard", redTeam?.ui?.scoreboard ?? "#f87171");
+  setRootCssVariableIfChanged("--team-blue-scoreboard", blueTeam?.ui?.scoreboard ?? "#60a5fa");
+  setRootCssVariableIfChanged("--team-red-attack", redTeam?.ui?.attack ?? "#fca5a5");
+  setRootCssVariableIfChanged("--team-blue-attack", blueTeam?.ui?.attack ?? "#93c5fd");
+  setRootCssVariableIfChanged("--team-red-player", redTeam?.ui?.player ?? "#fecaca");
+  setRootCssVariableIfChanged("--team-blue-player", blueTeam?.ui?.player ?? "#bfdbfe");
+}
+
 export function setScoreboardLineView(element, baseClassName, themeClassName, text) {
   if (!element) return;
   const className = themeClassName ? `${baseClassName} ${themeClassName}` : baseClassName;
@@ -104,6 +124,8 @@ export function setScoreboardLineView(element, baseClassName, themeClassName, te
 }
 
 export function updateScoreboardView({ game, scoreStatus, attackStatus, playerStatus, getFootballPlayerLabel }) {
+  const redTeamName = game.teamSlots?.red?.name ?? "Red";
+  const blueTeamName = game.teamSlots?.blue?.name ?? "Blue";
   if (playerStatus && game.refRestart?.active && (game.refRestart.kind ?? "boundary") === "kickoff") {
     setScoreboardLineView(
       playerStatus,
@@ -120,9 +142,9 @@ export function updateScoreboardView({ game, scoreStatus, attackStatus, playerSt
   if (scoreStatus) {
     setElementTextIfChanged(scoreStatus, `${game.redScore} : ${game.blueScore}`);
     if (game.attackingTeam === 1) {
-      setScoreboardLineView(attackStatus, "scoreboard-attack", "scoreboard-attack-red", `${TEAM_DISPLAY_NAMES.red} attacks`);
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "scoreboard-attack-red", `${redTeamName} attacks`);
     } else if (game.attackingTeam === -1) {
-      setScoreboardLineView(attackStatus, "scoreboard-attack", "scoreboard-attack-blue", `${TEAM_DISPLAY_NAMES.blue} attacks`);
+      setScoreboardLineView(attackStatus, "scoreboard-attack", "scoreboard-attack-blue", `${blueTeamName} attacks`);
     } else {
       setScoreboardLineView(attackStatus, "scoreboard-attack", "", "Attack: loose ball");
     }
@@ -185,21 +207,30 @@ export function formatGoalOrdinal(count) {
   return `${absCount}th`;
 }
 
-export function setGoalOverlayStateView({ active, scorer = null, team = 0, goalOverlay, goalOverlayTitle, goalOverlayScorer }) {
+export function setGoalOverlayStateView({ active, scorer = null, team = 0, game = null, goalOverlay, goalOverlayTitle, goalOverlayScorer }) {
   if (!active) {
     setElementStylePropertyIfChanged(goalOverlay, "display", "none");
     setElementStylePropertyIfChanged(goalOverlay, "opacity", "0");
     setElementStylePropertyIfChanged(goalOverlay, "transform", GOAL_OVERLAY_HIDDEN_TRANSFORM);
     return;
   }
+  const teamData = getFootballTeamData(game, team);
   setElementStylePropertyIfChanged(goalOverlay, "display", "block");
   setElementTextIfChanged(goalOverlayTitle, "GOAL");
-  setElementStylePropertyIfChanged(goalOverlayTitle, "color", team === 1 ? "#fecaca" : team === -1 ? "#bfdbfe" : "#f8fafc");
+  setElementStylePropertyIfChanged(
+    goalOverlayTitle,
+    "color",
+    teamData?.ui?.goalTitle ?? (team === 1 ? "#fecaca" : team === -1 ? "#bfdbfe" : "#f8fafc")
+  );
   setElementTextIfChanged(
     goalOverlayScorer,
     scorer ? `${scorer.shirtNumber} - ${scorer.displayName} | ${formatGoalOrdinal(scorer.goalsScored ?? 1)} goal` : "SCORER UNKNOWN"
   );
-  setElementStylePropertyIfChanged(goalOverlayScorer, "color", team === 1 ? "#fca5a5" : team === -1 ? "#93c5fd" : "#dbeafe");
+  setElementStylePropertyIfChanged(
+    goalOverlayScorer,
+    "color",
+    teamData?.ui?.goalScorer ?? (team === 1 ? "#fca5a5" : team === -1 ? "#93c5fd" : "#dbeafe")
+  );
 }
 
 function captureFootballReplayFrame(game, replayClock) {

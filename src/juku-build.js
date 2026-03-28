@@ -1,5 +1,6 @@
 import * as THREE from "./three.js";
 import { RUNNER_BASE_Y } from "./game-config.js";
+import { DEFAULT_WORLD_CHARACTER_DATA } from "./world-character-data.js";
 import {
   addHairStyle,
   addHumanoidHips,
@@ -304,19 +305,23 @@ export function buildSword() {
   return { root, bladeSegments, tip };
 }
 
-export function buildJuku() {
+export function buildJuku(jukuData = DEFAULT_WORLD_CHARACTER_DATA.juku) {
   const root = new THREE.Group();
   root.position.y = RUNNER_BASE_Y;
+  const resolvedJukuData = jukuData ?? DEFAULT_WORLD_CHARACTER_DATA.juku;
 
   const palette = {
-    skin: 0xe7c1a3,
-    shirt: 0x2d63b5,
-    pants: 0xc5202a,
-    shoe: 0x151618,
-    hair: 0x2f1a0f,
+    skin: resolvedJukuData.colors.skin,
+    shirt: resolvedJukuData.colors.shirt,
+    pants: resolvedJukuData.colors.pants,
+    shoe: resolvedJukuData.colors.shoe,
+    hair: resolvedJukuData.colors.hair,
     white: 0xf6f7fb,
-    hairStyle: "short"
+    hairStyle: resolvedJukuData.hairStyle
   };
+  const shirtBright = new THREE.Color(palette.shirt).multiplyScalar(1.08).getHex();
+  const shirtMid = new THREE.Color(palette.shirt).multiplyScalar(0.94).getHex();
+  const shirtDark = new THREE.Color(palette.shirt).multiplyScalar(0.82).getHex();
   const limbDeps = { addPart, addScaledPart };
 
   const torso = new THREE.Group();
@@ -325,9 +330,9 @@ export function buildJuku() {
   const hips = addHumanoidHips(root, palette.pants, new THREE.Vector3(0, 1.81, -0.02));
   const torsoShape = addHumanoidTorso(torso, {
     shirt: palette.shirt,
-    shirtBright: 0x3b6fc1,
-    shirtMid: 0x3768b7,
-    shirtDark: 0x275aa4
+    shirtBright,
+    shirtMid,
+    shirtDark
   });
 
   addPart(root, getSharedTorusGeometry(0.17, 0.04, 10, 20), palette.white, new THREE.Vector3(0, 2.75, 0.02), new THREE.Euler(Math.PI / 2, 0, 0));

@@ -4,7 +4,8 @@ import { renderCamera3PipView } from "./camera-system.js";
 import { createFootballBridge } from "./football-bridge.js";
 import { createFootballBehaviorState } from "./football-behavior-state.js";
 import { buildFootballGame } from "./football-build.js";
-import { loadFootballTeamData } from "./football-roster-data.js";
+import { applyFootballTeamPresentation } from "./football-presentation.js";
+import { loadWorldCharacterData } from "./world-character-data.js";
 import { makeFootballNameTag } from "./football-ui-build.js";
 import { buildJuku, buildSword } from "./juku-build.js";
 import { renderGoalReplay3DView } from "./football-replay-render.js";
@@ -30,7 +31,7 @@ function formatTrackTime(seconds) {
 export async function bootApp() {
   if (appBooted) return;
   appBooted = true;
-  const footballTeamData = await loadFootballTeamData();
+  const worldCharacterData = await loadWorldCharacterData();
 
   const {
     attackStatus,
@@ -49,6 +50,8 @@ export async function bootApp() {
     replayCard,
     replayFlash,
     scoreStatus,
+    scoreboardTeamBlue,
+    scoreboardTeamRed,
     trackTimerValue,
     touchCameraButtons,
     touchCameraName,
@@ -61,6 +64,11 @@ export async function bootApp() {
     touchZoomInButton,
     touchZoomOutButton
   } = createUi();
+
+  applyFootballTeamPresentation(worldCharacterData, {
+    redTeamLabel: scoreboardTeamRed,
+    blueTeamLabel: scoreboardTeamBlue
+  });
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -109,12 +117,16 @@ export async function bootApp() {
   const runningTrack = buildRunningTrack();
   scene.add(runningTrack);
 
-  const footballGame = buildFootballGame(footballTeamData);
+  const footballGame = buildFootballGame(worldCharacterData);
   footballGame.kickoffTeam = Math.random() < 0.5 ? 1 : -1;
   scene.add(footballGame.group);
 
-  const juku = buildJuku();
-  const jukuNameTag = makeFootballNameTag("Juku", "rgba(29,99,181,0.92)");
+  const juku = buildJuku(worldCharacterData.juku);
+  const jukuNameTag = makeFootballNameTag(
+    worldCharacterData.juku.name,
+    worldCharacterData.juku.ui.nameTagBackground,
+    worldCharacterData.juku.ui.nameTagText
+  );
   jukuNameTag.position.set(0, 4.22, 0);
   jukuNameTag.material.opacity = 0.82;
   juku.root.add(jukuNameTag);

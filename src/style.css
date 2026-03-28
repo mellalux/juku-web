@@ -1,6 +1,12 @@
 :root {
   color-scheme: light;
   font-family: "Trebuchet MS", Verdana, sans-serif;
+  --team-red-scoreboard: #f87171;
+  --team-blue-scoreboard: #60a5fa;
+  --team-red-attack: #fca5a5;
+  --team-blue-attack: #93c5fd;
+  --team-red-player: #fecaca;
+  --team-blue-player: #bfdbfe;
 }
 
 #app,
@@ -66,11 +72,11 @@ body,
 }
 
 .scoreboard-team-red {
-  color: #f87171;
+  color: var(--team-red-scoreboard);
 }
 
 .scoreboard-team-blue {
-  color: #60a5fa;
+  color: var(--team-blue-scoreboard);
 }
 
 .scoreboard-main {
@@ -131,11 +137,11 @@ body,
 }
 
 .scoreboard-attack-red {
-  color: #fca5a5;
+  color: var(--team-red-attack);
 }
 
 .scoreboard-attack-blue {
-  color: #93c5fd;
+  color: var(--team-blue-attack);
 }
 
 .scoreboard-player {
@@ -148,11 +154,11 @@ body,
 }
 
 .scoreboard-player-red {
-  color: #fecaca;
+  color: var(--team-red-player);
 }
 
 .scoreboard-player-blue {
-  color: #bfdbfe;
+  color: var(--team-blue-player);
 }
 
 .scoreboard-score {

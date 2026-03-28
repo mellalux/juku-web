@@ -5,6 +5,8 @@ export function createUi() {
   const scoreStatus = document.querySelector("#score-status");
   const attackStatus = document.querySelector("#attack-status");
   const playerStatus = document.querySelector("#player-status");
+  const scoreboardTeamRed = document.querySelector("#scoreboard-team-red");
+  const scoreboardTeamBlue = document.querySelector("#scoreboard-team-blue");
   const behaviorModeButtons = Array.from(document.querySelectorAll("[data-behavior]"));
   const touchJumpButton = document.querySelector("#touch-jump");
   const touchEquipButton = document.querySelector("#touch-equip");
@@ -183,6 +185,8 @@ export function createUi() {
     replayCard,
     replayFlash,
     scoreStatus,
+    scoreboardTeamBlue,
+    scoreboardTeamRed,
     trackTimerValue,
     touchCameraButtons,
     touchCameraName,

@@ -7,8 +7,6 @@ import {
   FOOTBALL_GOAL_HEIGHT,
   FOOTBALL_GOAL_WIDTH,
   FOOTBALL_PLAYER_COUNT,
-  HAIR_COLOR_VARIANTS,
-  HAIR_STYLE_VARIANTS,
   TRACK_100M_START_X,
   TRACK_FINISH_X,
   TRACK_HURDLE_COUNT,
@@ -20,10 +18,12 @@ import {
 } from "./game-config.js";
 import {
   getFootballSpeedProfileModifiers,
-  getFootballTraitModifiers,
-  normalizeFootballRosterEntry
+  getFootballTraitModifiers
 } from "./football-helpers.js";
-import { DEFAULT_FOOTBALL_TEAM_DATA } from "./football-roster-data.js";
+import {
+  DEFAULT_WORLD_CHARACTER_DATA,
+  normalizeWorldCharacterData
+} from "./world-character-data.js";
 import { getFootballPerimeterTFromPoint } from "./football-referee-runtime.js";
 import {
   makeFootballNameTag,
@@ -185,7 +185,14 @@ function pushGoalPhysicalColliders(colliders, goal) {
   }
 }
 
-export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
+export function buildFootballGame(teamData = null) {
+  const resolvedTeamData = teamData?.red && teamData?.blue
+    ? teamData
+    : normalizeWorldCharacterData(teamData ?? DEFAULT_WORLD_CHARACTER_DATA);
+  const refereeInfo = resolvedTeamData.referee ?? DEFAULT_WORLD_CHARACTER_DATA.referee;
+  const trackRunnerData = Array.isArray(resolvedTeamData.trackRunners) && resolvedTeamData.trackRunners.length > 0
+    ? resolvedTeamData.trackRunners
+    : DEFAULT_WORLD_CHARACTER_DATA.trackRunners;
   const group = new THREE.Group();
 
   const ball = new THREE.Mesh(
@@ -270,33 +277,33 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
   );
 
   const refereeRunner = scaleRunner(buildRunner({
-    shirt: 0xf3f4f6,
-    shorts: 0x16181c,
-    shoe: 0x121316,
-    hair: 0x2a1a12,
-    hairStyle: "parted",
+    shirt: refereeInfo.colors.shirt,
+    shorts: refereeInfo.colors.shorts,
+    shoe: refereeInfo.colors.shoe,
+    hair: refereeInfo.colors.hair,
+    hairStyle: refereeInfo.hairStyle,
     runnerStyle: "athlete"
   }));
   refereeRunner.root.position.set(FOOTBALL_FIELD_HALF_WIDTH + 1.15, refereeRunner.baseY, -3.4);
   refereeRunner.root.rotation.y = THREE.MathUtils.degToRad(-90);
-  applyStripedShirtToTorso(refereeRunner.torsoPivot, 0xf7f7f4, 0x111214);
+  applyStripedShirtToTorso(refereeRunner.torsoPivot, refereeInfo.colors.shirt, refereeInfo.colors.stripe);
   const whistle = addPart(
     refereeRunner.leftArmRig.handPivot,
     getSharedBoxGeometry(0.05, 0.022, 0.016),
-    0x0f1115,
+    refereeInfo.colors.whistle,
     new THREE.Vector3(0.016, -0.026, 0.094),
     new THREE.Euler(0.18, 0, 0)
   );
   const yellowCard = new THREE.Mesh(
     getSharedBoxGeometry(0.088, 0.118, 0.01),
-    new THREE.MeshStandardMaterial({ color: 0xf6d32d, roughness: 0.48, transparent: true, opacity: 0 })
+    new THREE.MeshStandardMaterial({ color: refereeInfo.colors.yellowCard, roughness: 0.48, transparent: true, opacity: 0 })
   );
   yellowCard.position.set(0.02, -0.024, 0.09);
   yellowCard.visible = false;
   refereeRunner.rightArmRig.handPivot.add(yellowCard);
   const redCard = new THREE.Mesh(
     getSharedBoxGeometry(0.088, 0.118, 0.01),
-    new THREE.MeshStandardMaterial({ color: 0xc1272d, roughness: 0.48, transparent: true, opacity: 0 })
+    new THREE.MeshStandardMaterial({ color: refereeInfo.colors.redCard, roughness: 0.48, transparent: true, opacity: 0 })
   );
   redCard.position.set(0.02, -0.024, 0.078);
   redCard.visible = false;
@@ -308,7 +315,11 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
   carryBall.visible = false;
   refereeRunner.leftArmRig.handPivot.add(carryBall);
   carryBall.position.set(0.02, -0.02, 0.12);
-  const refereeNameTag = makeFootballNameTag("Ronaldo", "rgba(241,245,249,0.94)", "#111827");
+  const refereeNameTag = makeFootballNameTag(
+    refereeInfo.name,
+    refereeInfo.ui.nameTagBackground,
+    refereeInfo.ui.nameTagText
+  );
   refereeNameTag.position.set(0, 4.12, 0);
   refereeNameTag.material.opacity = 0.52;
   refereeRunner.root.add(refereeNameTag);
@@ -344,10 +355,11 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
   const homeXByLane = [0, -FOOTBALL_FIELD_HALF_WIDTH * 0.42, FOOTBALL_FIELD_HALF_WIDTH * 0.42, -FOOTBALL_FIELD_HALF_WIDTH * 0.58, 0, FOOTBALL_FIELD_HALF_WIDTH * 0.58];
   for (let i = 0; i < FOOTBALL_PLAYER_COUNT; i += 1) {
     const team = i < perTeam ? 1 : -1;
-    const teamName = team === 1 ? "red" : "blue";
-    const teamRoster = Array.isArray(teamData?.[teamName]) ? teamData[teamName] : DEFAULT_FOOTBALL_TEAM_DATA[teamName];
+    const teamSlot = team === 1 ? "red" : "blue";
+    const teamInfo = resolvedTeamData[teamSlot];
+    const teamRoster = teamInfo.players;
     const lane = i % perTeam;
-    const rosterEntry = normalizeFootballRosterEntry(teamRoster[lane], teamName, lane);
+    const rosterEntry = teamRoster[lane];
     const role = rosterEntry.role;
     const homeX = rosterEntry.homeX ?? (homeXByLane[lane] ?? 0);
     const defaultHomeZ = role === "keeper"
@@ -356,14 +368,12 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
         ? -team * (FOOTBALL_FIELD_HALF_LENGTH * 0.44 - Math.abs(homeX) * 0.05) + (Math.random() - 0.5) * 0.8
         : -team * (FOOTBALL_FIELD_HALF_LENGTH * 0.22 - Math.abs(homeX) * 0.04) + (Math.random() - 0.5) * 1.1;
     const homeZ = rosterEntry.homeZ ?? defaultHomeZ;
-    const hairStyle = HAIR_STYLE_VARIANTS[(i + (team === 1 ? 0 : 2)) % HAIR_STYLE_VARIANTS.length];
-    const hairColor = HAIR_COLOR_VARIANTS[(lane + (team === 1 ? 1 : 3)) % HAIR_COLOR_VARIANTS.length];
     const runner = scaleRunner(buildRunner({
-      shirt: team === 1 ? 0xcf3a2f : 0x1d58b4,
-      shorts: team === 1 ? 0x6a1f1b : 0x163869,
-      shoe: 0x151617,
-      hair: hairColor,
-      hairStyle,
+      shirt: teamInfo.colors.primary,
+      shorts: teamInfo.colors.secondary,
+      shoe: teamInfo.colors.shoe,
+      hair: rosterEntry.hairColor,
+      hairStyle: rosterEntry.hairStyle,
       runnerStyle: "athlete"
     }));
     runner.athleteKneeLift = rosterEntry.speedProfile === "sprinter"
@@ -376,15 +386,23 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
     runner.root.position.set(homeX, runner.baseY, homeZ);
     const nameTag = makeFootballNameTag(
       `${rosterEntry.number} - ${rosterEntry.name}`,
-      team === 1 ? "rgba(254,226,226,0.95)" : "rgba(219,234,254,0.95)",
-      "#111827"
+      teamInfo.ui.nameTagBackground,
+      teamInfo.ui.nameTagText
     );
     nameTag.position.set(0, 4.18, 0);
     runner.root.add(nameTag);
-    const frontNumber = makeFootballNumberPatch(String(rosterEntry.number), team === 1 ? "#991b1b" : "#1e40af");
+    const frontNumber = makeFootballNumberPatch(
+      String(rosterEntry.number),
+      teamInfo.ui.numberPatchBackground,
+      teamInfo.ui.numberPatchText
+    );
     frontNumber.position.set(0, 0.19, 0.285);
     runner.torsoPivot.add(frontNumber);
-    const backNumber = makeFootballNumberPatch(String(rosterEntry.number), team === 1 ? "#991b1b" : "#1e40af");
+    const backNumber = makeFootballNumberPatch(
+      String(rosterEntry.number),
+      teamInfo.ui.numberPatchBackground,
+      teamInfo.ui.numberPatchText
+    );
     backNumber.position.set(0, 0.19, -0.24);
     backNumber.rotation.y = Math.PI;
     runner.torsoPivot.add(backNumber);
@@ -418,7 +436,8 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
     players.push({
       runner,
       team,
-      teamName,
+      teamName: teamInfo.id,
+      teamDisplayName: teamInfo.name,
       shirtNumber: rosterEntry.number,
       displayName: rosterEntry.name,
       positionLabel: rosterEntry.positionLabel,
@@ -490,27 +509,28 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
     });
   }
 
-  const trackPalette = [0x2d63b5, 0xf28f2d, 0x30a46f, 0x8f4bcf, 0xcf3f4f];
   const trackRunners = [];
   const innerLaneLength = getTrackLaneLength(0);
   for (let i = 0; i < TRACK_RUNNER_COUNT; i += 1) {
+    const runnerEntry = trackRunnerData[i] ?? DEFAULT_WORLD_CHARACTER_DATA.trackRunners[i];
     const runner = scaleRunner(buildRunner({
-      shirt: trackPalette[i % trackPalette.length],
-      shorts: 0x202431,
-      shoe: 0x151617,
-      hair: HAIR_COLOR_VARIANTS[(i + 2) % HAIR_COLOR_VARIANTS.length],
-      hairStyle: HAIR_STYLE_VARIANTS[(i + 1) % HAIR_STYLE_VARIANTS.length],
+      shirt: runnerEntry.colors.shirt,
+      shorts: runnerEntry.colors.shorts,
+      shoe: runnerEntry.colors.shoe,
+      hair: runnerEntry.colors.hair,
+      hairStyle: runnerEntry.hairStyle,
       runnerStyle: "athlete"
     }));
     const laneIndex = i % TRACK_LANE_COUNT;
     const progress = TRACK_RACE_START_PROGRESS;
     const point = getTrackPointAtProgress(laneIndex, progress);
     const dir = TRACK_RACE_DIRECTION;
-    const speed = 2.02 + i * 0.13 + Math.random() * 0.16;
+    const speed = runnerEntry.speed + Math.random() * runnerEntry.speedVariance;
     runner.root.position.set(point.x, runner.baseY, point.z);
     runner.root.rotation.y = Math.atan2(point.dirX * dir, point.dirZ * dir);
     group.add(runner.root);
     trackRunners.push({
+      displayName: runnerEntry.name,
       runner,
       homeLaneIndex: laneIndex,
       laneIndex,
@@ -600,6 +620,11 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
   return {
     group,
     ball,
+    referee: refereeInfo,
+    teamSlots: {
+      red: resolvedTeamData.red,
+      blue: resolvedTeamData.blue
+    },
     ballVel: new THREE.Vector3(0, 0, 0),
     restartSpot: { x: 0, z: 0 },
     goals,

@@ -4,7 +4,7 @@ const PRECACHE_URLS = [
   "/app-icons/apple-touch-icon.png",
   "/app-icons/icon-192.png",
   "/app-icons/icon-512.png",
-  "/data/football-team-data.json",
+  "/data/world-character-data.json",
   "/images/Juku.png",
   "/index.html",
   "/manifest.webmanifest",

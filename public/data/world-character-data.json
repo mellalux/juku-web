@@ -1,0 +1,90 @@
+{
+  "juku": {
+    "name": "Juku",
+    "hairStyle": "short",
+    "colors": {
+      "skin": "#e7c1a3",
+      "shirt": "#2d63b5",
+      "pants": "#c5202a",
+      "shoe": "#151618",
+      "hair": "#2f1a0f"
+    }
+  },
+  "referee": {
+    "name": "Ronaldo",
+    "hairStyle": "parted",
+    "colors": {
+      "shirt": "#f3f4f6",
+      "stripe": "#111214",
+      "shorts": "#16181c",
+      "shoe": "#121316",
+      "hair": "#2a1a12",
+      "whistle": "#0f1115",
+      "yellowCard": "#f6d32d",
+      "redCard": "#c1272d"
+    }
+  },
+  "trackRunners": [
+    { "name": "Aksel", "speed": 2.02, "speedVariance": 0.16, "hairStyle": "parted", "colors": { "shirt": "#2d63b5", "shorts": "#202431", "shoe": "#151617", "hair": "#c89b58" } },
+    { "name": "Bruno", "speed": 2.15, "speedVariance": 0.16, "hairStyle": "curly", "colors": { "shirt": "#f28f2d", "shorts": "#202431", "shoe": "#151617", "hair": "#121416" } },
+    { "name": "Carla", "speed": 2.28, "speedVariance": 0.16, "hairStyle": "bob", "colors": { "shirt": "#30a46f", "shorts": "#202431", "shoe": "#151617", "hair": "#6d4932" } },
+    { "name": "Dorian", "speed": 2.41, "speedVariance": 0.16, "hairStyle": "spiky", "colors": { "shirt": "#8f4bcf", "shorts": "#202431", "shoe": "#151617", "hair": "#2f1a0f" } },
+    { "name": "Elmar", "speed": 2.54, "speedVariance": 0.16, "hairStyle": "bangs", "colors": { "shirt": "#cf3f4f", "shorts": "#202431", "shoe": "#151617", "hair": "#5a3822" } },
+    { "name": "Freya", "speed": 2.67, "speedVariance": 0.16, "hairStyle": "pigtails", "colors": { "shirt": "#2d63b5", "shorts": "#202431", "shoe": "#151617", "hair": "#c89b58" } },
+    { "name": "Grete", "speed": 2.8, "speedVariance": 0.16, "hairStyle": "short", "colors": { "shirt": "#f28f2d", "shorts": "#202431", "shoe": "#151617", "hair": "#121416" } },
+    { "name": "Hendrik", "speed": 2.93, "speedVariance": 0.16, "hairStyle": "parted", "colors": { "shirt": "#30a46f", "shorts": "#202431", "shoe": "#151617", "hair": "#6d4932" } }
+  ],
+  "teams": [
+    {
+      "id": "bosbos",
+      "name": "Bosbos",
+      "colors": {
+        "primary": "#cf3a2f",
+        "secondary": "#6a1f1b",
+        "accent": "#991b1b"
+      },
+      "players": [
+        { "number": 1, "name": "Markus Saar", "role": "keeper", "positionLabel": "Goalkeeper", "preferredFoot": "right", "trait": "reflex", "speedProfile": "balanced", "hairStyle": "short", "hairColor": "#5a3822" },
+        { "number": 4, "name": "Karl Tamm", "role": "defender", "positionLabel": "Center Back", "preferredFoot": "right", "trait": "tackle", "speedProfile": "balanced", "hairStyle": "parted", "hairColor": "#c89b58" },
+        { "number": 17, "name": "Rene Kask", "role": "defender", "positionLabel": "Full Back", "preferredFoot": "left", "trait": "press", "speedProfile": "fast", "hairStyle": "curly", "hairColor": "#121416" },
+        { "number": 9, "name": "Artur Lepp", "role": "attacker", "positionLabel": "Left Forward", "preferredFoot": "left", "trait": "dribble", "attackProfile": "playmaker", "speedProfile": "fast", "hairStyle": "bob", "hairColor": "#6d4932" },
+        { "number": 11, "name": "Martin Kuusk", "role": "attacker", "positionLabel": "Striker", "preferredFoot": "right", "trait": "finish", "attackProfile": "poacher", "speedProfile": "balanced", "hairStyle": "spiky", "hairColor": "#2f1a0f" },
+        { "number": 27, "name": "Sander Oja", "role": "attacker", "positionLabel": "Right Forward", "preferredFoot": "right", "trait": "pace", "attackProfile": "runner", "speedProfile": "sprinter", "hairStyle": "bangs", "hairColor": "#5a3822" }
+      ]
+    },
+    {
+      "id": "volta",
+      "name": "Volta",
+      "colors": {
+        "primary": "#1d58b4",
+        "secondary": "#163869",
+        "accent": "#1e40af"
+      },
+      "players": [
+        { "number": 1, "name": "Mart Poom", "role": "keeper", "positionLabel": "Goalkeeper", "preferredFoot": "right", "trait": "reflex", "speedProfile": "balanced", "hairStyle": "parted", "hairColor": "#121416" },
+        { "number": 5, "name": "Oliver Kask", "role": "defender", "positionLabel": "Center Back", "preferredFoot": "right", "trait": "mark", "speedProfile": "balanced", "hairStyle": "curly", "hairColor": "#6d4932" },
+        { "number": 14, "name": "Mark Randel", "role": "defender", "positionLabel": "Full Back", "preferredFoot": "left", "trait": "intercept", "speedProfile": "fast", "hairStyle": "bob", "hairColor": "#2f1a0f" },
+        { "number": 19, "name": "Mihkel Aron", "role": "attacker", "positionLabel": "Left Forward", "preferredFoot": "left", "trait": "dribble", "attackProfile": "playmaker", "speedProfile": "balanced", "hairStyle": "spiky", "hairColor": "#5a3822" },
+        { "number": 51, "name": "Lucas Nikolas", "role": "attacker", "positionLabel": "Striker", "preferredFoot": "right", "trait": "finish", "attackProfile": "poacher", "speedProfile": "fast", "hairStyle": "bangs", "hairColor": "#c89b58" },
+        { "number": 7, "name": "Teodor Oliver", "role": "attacker", "positionLabel": "Right Forward", "preferredFoot": "right", "trait": "pace", "attackProfile": "runner", "speedProfile": "sprinter", "hairStyle": "pigtails", "hairColor": "#121416" }
+      ]
+    },
+    {
+      "id": "kotkas",
+      "name": "Kotkas",
+      "colors": {
+        "primary": "#16a34a",
+        "secondary": "#14532d",
+        "accent": "#166534"
+      },
+      "players": [
+        { "number": 1, "name": "Robin Vaher", "role": "keeper", "positionLabel": "Goalkeeper", "preferredFoot": "right", "trait": "reflex", "speedProfile": "balanced", "hairStyle": "short", "hairColor": "#2f1a0f" },
+        { "number": 3, "name": "Kristjan Pold", "role": "defender", "positionLabel": "Center Back", "preferredFoot": "right", "trait": "tackle", "speedProfile": "balanced", "hairStyle": "parted", "hairColor": "#5a3822" },
+        { "number": 22, "name": "Joosep Nurm", "role": "defender", "positionLabel": "Full Back", "preferredFoot": "left", "trait": "intercept", "speedProfile": "fast", "hairStyle": "curly", "hairColor": "#c89b58" },
+        { "number": 10, "name": "Andreas Sild", "role": "attacker", "positionLabel": "Left Forward", "preferredFoot": "left", "trait": "dribble", "attackProfile": "playmaker", "speedProfile": "fast", "hairStyle": "spiky", "hairColor": "#121416" },
+        { "number": 8, "name": "Henri Paas", "role": "attacker", "positionLabel": "Striker", "preferredFoot": "right", "trait": "finish", "attackProfile": "poacher", "speedProfile": "balanced", "hairStyle": "bangs", "hairColor": "#6d4932" },
+        { "number": 77, "name": "Gregor Raid", "role": "attacker", "positionLabel": "Right Forward", "preferredFoot": "right", "trait": "pace", "attackProfile": "runner", "speedProfile": "sprinter", "hairStyle": "bob", "hairColor": "#2f1a0f" }
+      ]
+    }
+  ]
+}

@@ -1,28 +1,7 @@
-import { FOOTBALL_ROLE_LABELS } from "./game-config.js";
-
-function getDefaultFootballRole(lane) {
-  if (lane === 0) return "keeper";
-  if (lane <= 2) return "defender";
-  return "attacker";
-}
-
-export function normalizeFootballRosterEntry(entry, teamName, lane) {
-  const fallbackName = teamName === "red" ? `Red ${lane + 1}` : `Blue ${lane + 1}`;
-  const fallbackRole = getDefaultFootballRole(lane);
-  const rosterEntry = entry ?? {};
-  const role = rosterEntry.role ?? fallbackRole;
-  return {
-    number: rosterEntry.number ?? 0,
-    name: rosterEntry.name ?? fallbackName,
-    role,
-    positionLabel: rosterEntry.positionLabel ?? FOOTBALL_ROLE_LABELS[role] ?? role,
-    preferredFoot: rosterEntry.preferredFoot ?? "right",
-    trait: rosterEntry.trait ?? null,
-    speedProfile: rosterEntry.speedProfile ?? "balanced",
-    attackProfile: rosterEntry.attackProfile ?? null,
-    homeX: rosterEntry.homeX ?? null,
-    homeZ: rosterEntry.homeZ ?? null
-  };
+export function getFootballTeamData(game, team) {
+  if (team === 1) return game?.teamSlots?.red ?? null;
+  if (team === -1) return game?.teamSlots?.blue ?? null;
+  return null;
 }
 
 export function getFootballSpeedProfileModifiers(speedProfile) {

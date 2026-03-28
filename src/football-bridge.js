@@ -61,7 +61,7 @@ export function createFootballBridge({
   }
 
   function setGoalOverlayState(active, scorer = null, team = 0) {
-    setGoalOverlayStateView({ active, scorer, team, goalOverlay, goalOverlayTitle, goalOverlayScorer });
+    setGoalOverlayStateView({ active, scorer, team, game: footballGame, goalOverlay, goalOverlayTitle, goalOverlayScorer });
   }
 
   function recordFootballReplay(game = footballGame, dt) {

@@ -113,10 +113,6 @@ export const FACE_NAMES = {
   happy: "HAPPY",
   sad: "SAD"
 };
-export const TEAM_DISPLAY_NAMES = {
-  red: "Bosbos",
-  blue: "Volta"
-};
 export const FOOTBALL_BEHAVIOR_PRESET = "arcade";
 export const FOOTBALL_BEHAVIOR_PRESETS = {
   realistic: {
