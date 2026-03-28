@@ -216,6 +216,7 @@ function resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, radius, coll
   result.z = nextZ;
   if (!colliders || colliders.length === 0) return result;
   const ignoreGoalColliders = options.ignoreGoalColliders ?? false;
+  const ignoreRoles = options.ignoreRoles ?? null;
 
   for (let pass = 0; pass < 4; pass += 1) {
     let moved = false;
@@ -223,6 +224,7 @@ function resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, radius, coll
     for (let i = 0; i < colliders.length; i += 1) {
       const collider = colliders[i];
       if (ignoreGoalColliders && typeof collider.role === "string" && collider.role.startsWith("goal")) continue;
+      if (ignoreRoles && Array.isArray(ignoreRoles) && ignoreRoles.includes(collider.role)) continue;
 
       if (collider.type === "circle") {
         const minDist = collider.r + radius;
@@ -291,6 +293,9 @@ export function resolvePeopleCollisionsRuntime(
 ) {
   const people = COLLISION_PEOPLE_POOL;
   let peopleCount = 0;
+  const jukuIgnoreRoles = state.roadster?.phase && state.roadster.phase !== "idle"
+    ? ["tracksideRoadster"]
+    : null;
 
   for (let i = 0; i < game.players.length; i += 1) {
     const p = game.players[i];
@@ -387,7 +392,8 @@ export function resolvePeopleCollisionsRuntime(
       person.x,
       person.z,
       person.radius,
-      colliders
+      colliders,
+      { ignoreRoles: jukuIgnoreRoles }
     );
     const clamped = clampGoalInteriorPosition(
       resolved.x,

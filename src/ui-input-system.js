@@ -28,6 +28,7 @@ export function setupUiInputSystem({
   touchJoystick,
   touchJoystickThumb,
   touchJumpButton,
+  touchRoadsterButton,
   touchZoomInButton,
   touchZoomOutButton,
   setFootballBehaviorPreset
@@ -64,6 +65,11 @@ export function setupUiInputSystem({
     touchEquipButton.classList.toggle("is-active", active);
   }
 
+  function setTouchRoadsterVisual(active) {
+    if (!touchRoadsterButton) return;
+    touchRoadsterButton.classList.toggle("is-active", active);
+  }
+
   function setTouchEquipVisible(visible) {
     if (!touchEquipButton) return;
     const nextDisplay = visible ? "" : "none";
@@ -71,6 +77,15 @@ export function setupUiInputSystem({
       touchEquipButton.style.display = nextDisplay;
     }
     touchEquipButton.setAttribute("aria-hidden", visible ? "false" : "true");
+  }
+
+  function setTouchRoadsterVisible(visible) {
+    if (!touchRoadsterButton) return;
+    const nextDisplay = visible ? "" : "none";
+    if (touchRoadsterButton.style.display !== nextDisplay) {
+      touchRoadsterButton.style.display = nextDisplay;
+    }
+    touchRoadsterButton.setAttribute("aria-hidden", visible ? "false" : "true");
   }
 
   function syncTouchFaceButtons() {
@@ -115,6 +130,21 @@ export function setupUiInputSystem({
     const nextLabel = state.heldItemId ? "DROP" : "PICK UP";
     if (touchEquipButton.textContent !== nextLabel) {
       touchEquipButton.textContent = nextLabel;
+    }
+  }
+
+  function updateTouchRoadsterLabel() {
+    if (!touchRoadsterButton) return;
+    const roadsterPhase = state.roadster?.phase ?? "idle";
+    const showButton = roadsterPhase === "seated" || (roadsterPhase === "idle" && state.roadster?.nearby);
+    if (!showButton) {
+      setTouchRoadsterVisual(false);
+    }
+    setTouchRoadsterVisible(showButton);
+    if (!showButton) return;
+    const nextLabel = roadsterPhase === "seated" ? "EXIT" : "ENTER";
+    if (touchRoadsterButton.textContent !== nextLabel) {
+      touchRoadsterButton.textContent = nextLabel;
     }
   }
 
@@ -297,6 +327,22 @@ export function setupUiInputSystem({
     touchEquipButton.addEventListener("lostpointercapture", endEquipTouch);
   }
 
+  if (touchRoadsterButton) {
+    const endRoadsterTouch = () => {
+      setTouchRoadsterVisual(false);
+    };
+
+    touchRoadsterButton.addEventListener("pointerdown", (event) => {
+      state.touchRoadsterTrigger = true;
+      setTouchRoadsterVisual(true);
+      playUiSound?.();
+      event.preventDefault();
+    });
+    touchRoadsterButton.addEventListener("pointerup", endRoadsterTouch);
+    touchRoadsterButton.addEventListener("pointercancel", endRoadsterTouch);
+    touchRoadsterButton.addEventListener("lostpointercapture", endRoadsterTouch);
+  }
+
   if (touchCameraButtons.length) {
     for (const button of touchCameraButtons) {
       button.addEventListener("pointerdown", (event) => {
@@ -335,6 +381,7 @@ export function setupUiInputSystem({
   syncTouchFaceButtons();
   setFootballBehaviorPreset(state.behaviorPreset);
   updateTouchEquipLabel();
+  updateTouchRoadsterLabel();
 
   if (touchZoomInButton) {
     touchZoomInButton.addEventListener("pointerdown", (event) => {
@@ -391,7 +438,8 @@ export function setupUiInputSystem({
     adjustTouchZoom,
     dollyCameraTowards,
     getCameraDolly,
-    updateTouchEquipLabel
+    updateTouchEquipLabel,
+    updateTouchRoadsterLabel
   };
 }
 

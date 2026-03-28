@@ -20,6 +20,11 @@ import {
   getSharedPlaneGeometry
 } from "./shared-geometry.js";
 import { getSharedStandardMaterial } from "./shared-materials.js";
+import {
+  buildTracksideRoadster,
+  createTracksideRoadsterColliders,
+  syncTracksideRoadsterColliders
+} from "./trackside-car.js";
 
 const trackLaneNumberMaterialCache = new Map();
 
@@ -380,7 +385,7 @@ for (let xi = 0; xi < FOOTBALL_CORNER_XS.length; xi += 1) {
   }
 }
 
-export function buildRunningTrack() {
+export function buildRunningTrack({ extraColliders = null } = {}) {
   const group = new THREE.Group();
 
   const track = new THREE.Mesh(
@@ -495,6 +500,21 @@ export function buildRunningTrack() {
       instances: FOOTBALL_FLAG_PENNANT_INSTANCES
     })
   );
+
+  const roadsterX = TRACK_CURVE_OUTER_RADIUS + 5.3;
+  const roadsterZ = TRACK_RACE_FINISH_Z + 5.5;
+  const roadsterYaw = THREE.MathUtils.degToRad(-20);
+  const roadster = buildTracksideRoadster();
+  roadster.position.set(roadsterX, 0, roadsterZ);
+  roadster.rotation.y = roadsterYaw;
+  group.add(roadster);
+  group.userData.roadster = roadster;
+  if (Array.isArray(extraColliders)) {
+    const roadsterColliders = createTracksideRoadsterColliders(roadsterX, roadsterZ, roadsterYaw);
+    roadster.userData.colliderRefs = roadsterColliders;
+    extraColliders.push(...roadsterColliders);
+    syncTracksideRoadsterColliders(roadster);
+  }
 
   return group;
 }

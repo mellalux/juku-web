@@ -12,11 +12,22 @@ import {
   syncPickupPresentation,
   syncPickupRuntimeState
 } from "./pickup-system.js";
+import {
+  isRoadsterSequenceActive,
+  isRoadsterSeatPoseActive,
+  shouldIgnoreRoadsterColliders,
+  syncRoadsterInteractionState,
+  tryStartRoadsterEntry,
+  tryStartRoadsterExit,
+  updateRoadsterDriveRuntime,
+  updateRoadsterEntryRuntime
+} from "./roadster-interaction.js";
 
 function updateJukuArmPose(arm, side, state, hasSword) {
   const walkPhase = side === -1 ? state.walkCycle + Math.PI : state.walkCycle;
   const armSwing = Math.sin(walkPhase) * 10 * state.walkBlend * (1 - state.airBlend * 0.65);
   arm.upperPivot.rotation.z = THREE.MathUtils.degToRad(side * 14);
+  arm.upperPivot.rotation.y = 0;
   arm.upperPivot.rotation.x = THREE.MathUtils.degToRad(-(4 + 15 * state.airBlend + 6 * state.pushBlend - 5 * state.crouchBlend + armSwing));
   arm.lowerPivot.rotation.x = THREE.MathUtils.degToRad(-(8 + 10 * state.airBlend + (hasSword ? 10 : 0)));
   if (arm.gripHand) {
@@ -49,11 +60,144 @@ function updateJukuLegPose(leg, side, state) {
   leg.footPivot.rotation.x = THREE.MathUtils.degToRad(anklePitch);
 }
 
+function applyRoadsterSeatPose(juku, state) {
+  const roadsterState = state.roadster;
+  const phase = roadsterState?.phase ?? "idle";
+  const seatBlend = THREE.MathUtils.clamp(state.roadster?.poseBlend ?? 0, 0, 1);
+  const reachBlend = phase === "opening" || phase === "exitOpening"
+    ? THREE.MathUtils.smoothstep(THREE.MathUtils.clamp(roadsterState?.doorOpen ?? 0, 0, 1), 0, 1)
+    : 0;
+  const sitBlend = phase === "opening" ? seatBlend * 0.34 : seatBlend;
+
+  if (seatBlend <= 0.001 && reachBlend <= 0.001) {
+    juku.torso.rotation.x = THREE.MathUtils.lerp(juku.torso.rotation.x, 0, 0.2);
+    juku.torso.rotation.y = THREE.MathUtils.lerp(juku.torso.rotation.y, 0, 0.2);
+    juku.torso.rotation.z = THREE.MathUtils.lerp(juku.torso.rotation.z, 0, 0.2);
+    juku.head.rotation.y = THREE.MathUtils.lerp(juku.head.rotation.y, 0, 0.2);
+    return;
+  }
+
+  juku.torso.rotation.x = THREE.MathUtils.lerp(
+    juku.torso.rotation.x,
+    THREE.MathUtils.degToRad(-8 * reachBlend - 10 * sitBlend),
+    0.26 + sitBlend * 0.38 + reachBlend * 0.24
+  );
+  juku.torso.rotation.y = THREE.MathUtils.lerp(
+    juku.torso.rotation.y,
+    THREE.MathUtils.degToRad(-16 * reachBlend),
+    0.24 + reachBlend * 0.34
+  );
+  juku.torso.rotation.z = THREE.MathUtils.lerp(
+    juku.torso.rotation.z,
+    THREE.MathUtils.degToRad(10 * reachBlend),
+    0.22 + reachBlend * 0.28
+  );
+  juku.head.position.y = THREE.MathUtils.lerp(juku.head.position.y, 3.2 - reachBlend * 0.06 - sitBlend * 0.06, 0.32);
+  juku.head.rotation.x = THREE.MathUtils.lerp(
+    juku.head.rotation.x,
+    THREE.MathUtils.degToRad(-12 * reachBlend - 8 * sitBlend),
+    0.24 + seatBlend * 0.28
+  );
+  juku.head.rotation.y = THREE.MathUtils.lerp(
+    juku.head.rotation.y,
+    THREE.MathUtils.degToRad(-14 * reachBlend),
+    0.22 + reachBlend * 0.28
+  );
+  juku.head.rotation.z = THREE.MathUtils.lerp(
+    juku.head.rotation.z,
+    THREE.MathUtils.degToRad(8 * reachBlend),
+    0.22 + seatBlend * 0.24
+  );
+
+  juku.leftArm.upperPivot.rotation.x = THREE.MathUtils.lerp(
+    juku.leftArm.upperPivot.rotation.x,
+    THREE.MathUtils.degToRad(-18 * reachBlend - 50 * sitBlend),
+    0.28 + seatBlend * 0.36
+  );
+  juku.leftArm.upperPivot.rotation.y = THREE.MathUtils.lerp(
+    juku.leftArm.upperPivot.rotation.y,
+    THREE.MathUtils.degToRad(-46 * reachBlend - 18 * sitBlend),
+    0.28 + seatBlend * 0.34
+  );
+  juku.leftArm.upperPivot.rotation.z = THREE.MathUtils.lerp(
+    juku.leftArm.upperPivot.rotation.z,
+    THREE.MathUtils.degToRad(48 * reachBlend + 26 * sitBlend),
+    0.28 + seatBlend * 0.34
+  );
+  juku.leftArm.lowerPivot.rotation.x = THREE.MathUtils.lerp(
+    juku.leftArm.lowerPivot.rotation.x,
+    THREE.MathUtils.degToRad(-54 * reachBlend - 68 * sitBlend),
+    0.28 + seatBlend * 0.34
+  );
+
+  juku.rightArm.upperPivot.rotation.x = THREE.MathUtils.lerp(
+    juku.rightArm.upperPivot.rotation.x,
+    THREE.MathUtils.degToRad(-10 * reachBlend - 46 * sitBlend),
+    0.28 + seatBlend * 0.34
+  );
+  juku.rightArm.upperPivot.rotation.y = THREE.MathUtils.lerp(
+    juku.rightArm.upperPivot.rotation.y,
+    THREE.MathUtils.degToRad(8 * reachBlend + 16 * sitBlend),
+    0.28 + seatBlend * 0.34
+  );
+  juku.rightArm.upperPivot.rotation.z = THREE.MathUtils.lerp(
+    juku.rightArm.upperPivot.rotation.z,
+    THREE.MathUtils.degToRad(-12 * reachBlend - 24 * sitBlend),
+    0.28 + seatBlend * 0.34
+  );
+  juku.rightArm.lowerPivot.rotation.x = THREE.MathUtils.lerp(
+    juku.rightArm.lowerPivot.rotation.x,
+    THREE.MathUtils.degToRad(-22 * reachBlend - 74 * sitBlend),
+    0.28 + seatBlend * 0.34
+  );
+
+  juku.leftLeg.root.rotation.x = THREE.MathUtils.lerp(
+    juku.leftLeg.root.rotation.x,
+    THREE.MathUtils.degToRad(20 * reachBlend + 78 * sitBlend),
+    0.24 + seatBlend * 0.32
+  );
+  juku.leftLeg.kneePivot.rotation.x = THREE.MathUtils.lerp(
+    juku.leftLeg.kneePivot.rotation.x,
+    THREE.MathUtils.degToRad(26 * reachBlend + 92 * sitBlend),
+    0.24 + seatBlend * 0.32
+  );
+  juku.leftLeg.footPivot.rotation.x = THREE.MathUtils.lerp(
+    juku.leftLeg.footPivot.rotation.x,
+    THREE.MathUtils.degToRad(-4 * reachBlend - 18 * sitBlend),
+    0.24 + seatBlend * 0.3
+  );
+
+  juku.rightLeg.root.rotation.x = THREE.MathUtils.lerp(
+    juku.rightLeg.root.rotation.x,
+    THREE.MathUtils.degToRad(-12 * reachBlend + 74 * sitBlend),
+    0.24 + seatBlend * 0.32
+  );
+  juku.rightLeg.kneePivot.rotation.x = THREE.MathUtils.lerp(
+    juku.rightLeg.kneePivot.rotation.x,
+    THREE.MathUtils.degToRad(20 * reachBlend + 96 * sitBlend),
+    0.24 + seatBlend * 0.32
+  );
+  juku.rightLeg.footPivot.rotation.x = THREE.MathUtils.lerp(
+    juku.rightLeg.footPivot.rotation.x,
+    THREE.MathUtils.degToRad(-6 * reachBlend - 16 * sitBlend),
+    0.24 + seatBlend * 0.3
+  );
+}
+
 export function updateJukuRuntime(
   dt,
-  { state, footballGame, updateTouchEquipLabel, resolveJukuCollisions, clampGoalInteriorPosition }
+  {
+    state,
+    footballGame,
+    roadster,
+    updateTouchEquipLabel,
+    updateTouchRoadsterLabel,
+    resolveJukuCollisions,
+    clampGoalInteriorPosition
+  }
 ) {
   syncPickupRuntimeState({ state, footballGame });
+  syncRoadsterInteractionState(state, roadster);
 
   state.faceTime += dt;
   if (state.blinkTimer > 0) {
@@ -83,38 +227,55 @@ export function updateJukuRuntime(
   state.tongueBlend = THREE.MathUtils.damp(state.tongueBlend, state.tongueActive ? 1 : 0, 12, dt);
 
   const enterNow = state.keys.has("Enter") || state.touchJump;
-  if (enterNow && !state.prevEnter && state.jumpState === 0) {
+  const roadsterLocked = isRoadsterSequenceActive(state);
+  if (!roadsterLocked && enterNow && !state.prevEnter && state.jumpState === 0) {
     state.jumpState = 1;
     state.jumpTimer = 0;
   }
   state.prevEnter = enterNow;
 
   const eNow = state.keys.has("KeyE") || state.touchETrigger;
+  const aNow = state.keys.has("KeyA") || state.touchRoadsterTrigger;
 
-  const crouchDur = 0.22;
-  if (state.jumpState === 1) {
-    state.jumpTimer += dt;
-    const p = Math.min(state.jumpTimer / crouchDur, 1);
-    state.crouchBlend = Math.sin(p * Math.PI);
-    state.pushBlend = p > 0.62 ? Math.min((p - 0.62) / 0.38, 1) : 0;
-    if (p >= 1) {
-      state.jumpState = 2;
-      state.jumpVel = JUMP_VELOCITY;
-      state.jumpY = 0.001;
-      state.crouchBlend = 0;
-      state.pushBlend = 1;
-    }
-  } else if (state.jumpState === 2) {
-    state.jumpVel -= GRAVITY * dt;
-    state.jumpY += state.jumpVel * dt;
-    state.pushBlend = Math.max(0, state.pushBlend - dt * 8);
-    if (state.jumpY <= 0) {
+  const aPressed = aNow && !state.prevA;
+  if (aPressed && tryStartRoadsterExit(state, roadster)) {
+    syncRoadsterInteractionState(state, roadster);
+  }
+
+  let roadsterActive = isRoadsterSequenceActive(state);
+  if (!roadsterActive) {
+    const crouchDur = 0.22;
+    if (state.jumpState === 1) {
+      state.jumpTimer += dt;
+      const p = Math.min(state.jumpTimer / crouchDur, 1);
+      state.crouchBlend = Math.sin(p * Math.PI);
+      state.pushBlend = p > 0.62 ? Math.min((p - 0.62) / 0.38, 1) : 0;
+      if (p >= 1) {
+        state.jumpState = 2;
+        state.jumpVel = JUMP_VELOCITY;
+        state.jumpY = 0.001;
+        state.crouchBlend = 0;
+        state.pushBlend = 1;
+      }
+    } else if (state.jumpState === 2) {
+      state.jumpVel -= GRAVITY * dt;
+      state.jumpY += state.jumpVel * dt;
+      state.pushBlend = Math.max(0, state.pushBlend - dt * 8);
+      if (state.jumpY <= 0) {
+        state.jumpY = 0;
+        state.jumpVel = 0;
+        state.jumpState = 0;
+        state.pushBlend = 0;
+      }
+    } else {
       state.jumpY = 0;
-      state.jumpVel = 0;
-      state.jumpState = 0;
+      state.crouchBlend = 0;
       state.pushBlend = 0;
     }
   } else {
+    state.jumpState = 0;
+    state.jumpTimer = 0;
+    state.jumpVel = 0;
     state.jumpY = 0;
     state.crouchBlend = 0;
     state.pushBlend = 0;
@@ -122,49 +283,96 @@ export function updateJukuRuntime(
 
   state.airBlend = THREE.MathUtils.clamp(state.airBlend + (state.jumpState === 2 ? dt * 8 : -dt * 8), 0, 1);
 
-  let moveInput = state.touchMove;
-  if (state.keys.has("ArrowUp")) moveInput += 1;
-  if (state.keys.has("ArrowDown")) moveInput -= 1;
-  moveInput = THREE.MathUtils.clamp(moveInput, -1, 1);
+  let moveInput = 0;
+  let turnInput = 0;
+  if (!roadsterActive) {
+    moveInput = state.touchMove;
+    if (state.keys.has("ArrowUp")) moveInput += 1;
+    if (state.keys.has("ArrowDown")) moveInput -= 1;
+    moveInput = THREE.MathUtils.clamp(moveInput, -1, 1);
 
-  let turnInput = state.touchTurn;
-  if (state.keys.has("ArrowLeft")) turnInput += 1;
-  if (state.keys.has("ArrowRight")) turnInput -= 1;
-  turnInput = THREE.MathUtils.clamp(turnInput, -1, 1);
+    turnInput = state.touchTurn;
+    if (state.keys.has("ArrowLeft")) turnInput += 1;
+    if (state.keys.has("ArrowRight")) turnInput -= 1;
+    turnInput = THREE.MathUtils.clamp(turnInput, -1, 1);
 
-  let moveScale = 1;
-  let turnScale = 1;
-  if (state.jumpState === 1) {
-    moveScale = 0.65;
-    turnScale = 0.65;
-  } else if (state.jumpState === 2) {
-    moveScale = 0.55;
-    turnScale = 0.55;
+    let moveScale = 1;
+    let turnScale = 1;
+    if (state.jumpState === 1) {
+      moveScale = 0.65;
+      turnScale = 0.65;
+    } else if (state.jumpState === 2) {
+      moveScale = 0.55;
+      turnScale = 0.55;
+    }
+
+    state.yaw += turnInput * JUKU_TURN_SPEED * dt * turnScale;
+
+    const yawRad = THREE.MathUtils.degToRad(state.yaw);
+    const fx = Math.sin(yawRad);
+    const fz = Math.cos(yawRad);
+    const prevX = state.x;
+    const prevZ = state.z;
+    state.x += fx * JUKU_SPEED * dt * moveInput * moveScale;
+    state.z += fz * JUKU_SPEED * dt * moveInput * moveScale;
+    const collisionOptions = shouldIgnoreRoadsterColliders(state)
+      ? { prevX, prevZ, ignoreRoles: ["tracksideRoadster"] }
+      : { prevX, prevZ };
+    const resolved = resolveJukuCollisions(state.x, state.z, collisionOptions);
+    clampGoalInteriorPosition(resolved.x, resolved.z, resolved, prevX, prevZ);
+    state.x = resolved.x;
+    state.z = resolved.z;
+  } else {
+    moveInput = state.touchMove;
+    if (state.keys.has("ArrowUp")) moveInput += 1;
+    if (state.keys.has("ArrowDown")) moveInput -= 1;
+    moveInput = THREE.MathUtils.clamp(moveInput, -1, 1);
+
+    turnInput = state.touchTurn;
+    if (state.keys.has("ArrowLeft")) turnInput += 1;
+    if (state.keys.has("ArrowRight")) turnInput -= 1;
+    turnInput = THREE.MathUtils.clamp(turnInput, -1, 1);
+
+    const prevX = state.x;
+    const prevZ = state.z;
+    updateRoadsterDriveRuntime(
+      dt,
+      state,
+      roadster,
+      state.roadster?.phase === "seated" ? moveInput : 0,
+      state.roadster?.phase === "seated" ? turnInput : 0
+    );
+    updateRoadsterEntryRuntime(dt, state, roadster);
+    moveInput = 0;
+    turnInput = 0;
+    state.nearbyPickupId = null;
   }
 
-  state.yaw += turnInput * JUKU_TURN_SPEED * dt * turnScale;
+  if (aPressed && !isRoadsterSequenceActive(state)) {
+    syncRoadsterInteractionState(state, roadster);
+    if (tryStartRoadsterEntry(state, roadster)) {
+      if (state.heldItemId) {
+        handlePickupAction({ state, footballGame });
+      }
+      syncPickupRuntimeState({ state, footballGame });
+      state.nearbyPickupId = null;
+    }
+  }
 
-  const yawRad = THREE.MathUtils.degToRad(state.yaw);
-  const fx = Math.sin(yawRad);
-  const fz = Math.cos(yawRad);
-  const prevX = state.x;
-  const prevZ = state.z;
-  state.x += fx * JUKU_SPEED * dt * moveInput * moveScale;
-  state.z += fz * JUKU_SPEED * dt * moveInput * moveScale;
-  const resolved = resolveJukuCollisions(state.x, state.z, { prevX, prevZ });
-  clampGoalInteriorPosition(resolved.x, resolved.z, resolved, prevX, prevZ);
-  state.x = resolved.x;
-  state.z = resolved.z;
-
-  if (eNow && !state.prevE) {
+  roadsterActive = isRoadsterSequenceActive(state);
+  if (!roadsterActive && eNow && !state.prevE) {
     handlePickupAction({ state, footballGame });
   } else {
     syncPickupRuntimeState({ state, footballGame });
   }
 
   state.prevE = eNow;
+  state.prevA = aNow;
   state.touchETrigger = false;
+  state.touchRoadsterTrigger = false;
+  syncRoadsterInteractionState(state, roadster);
   updateTouchEquipLabel();
+  updateTouchRoadsterLabel?.();
 
   if (moveInput !== 0) {
     state.walkBlend = Math.min(1, state.walkBlend + dt * 6.2);
@@ -207,8 +415,12 @@ function animateJukuSwordBlade(sword, swordWaveTime, brightness = 1) {
 }
 
 export function updateJukuPoseRuntime({ state, juku, footballGame, pickupSceneObjects, faceStatus }) {
-  const swordHeld = state.heldItemId === "sword";
-  juku.root.position.set(state.x, JUKU_BASE_Y + state.jumpY - state.crouchBlend * 0.09, state.z);
+  const roadsterPoseActive = isRoadsterSeatPoseActive(state);
+  const swordHeld = state.heldItemId === "sword" && !roadsterPoseActive;
+  const rootY = Number.isFinite(state.roadster?.rootY)
+    ? state.roadster.rootY
+    : JUKU_BASE_Y + state.jumpY - state.crouchBlend * 0.09;
+  juku.root.position.set(state.x, rootY, state.z);
   juku.root.rotation.y = THREE.MathUtils.degToRad(state.yaw);
 
   const blinkPhase = state.blinkTimer > 0 ? 1 - state.blinkTimer / 0.16 : 0;
@@ -315,10 +527,14 @@ export function updateJukuPoseRuntime({ state, juku, footballGame, pickupSceneOb
 
   updateJukuLegPose(juku.leftLeg, 1, state);
   updateJukuLegPose(juku.rightLeg, -1, state);
+  applyRoadsterSeatPose(juku, state);
 
   const swordWaveTime = state.faceTime * 0.34;
   animateJukuSwordBlade(juku.heldSword, swordWaveTime, 1);
   animateJukuSwordBlade(pickupSceneObjects?.sword?.world, swordWaveTime, 0.92);
 
   syncPickupPresentation({ state, footballGame, juku, pickupSceneObjects });
+  if (roadsterPoseActive && juku.heldSword?.root) {
+    juku.heldSword.root.visible = false;
+  }
 }

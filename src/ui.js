@@ -9,6 +9,7 @@ export function createUi() {
   const scoreboardTeamBlue = document.querySelector("#scoreboard-team-blue");
   const behaviorModeButtons = Array.from(document.querySelectorAll("[data-behavior]"));
   const touchJumpButton = document.querySelector("#touch-jump");
+  const touchRoadsterButton = document.querySelector("#touch-roadster");
   const touchEquipButton = document.querySelector("#touch-equip");
   const touchZoomInButton = document.querySelector("#touch-zoom-in");
   const touchZoomOutButton = document.querySelector("#touch-zoom-out");
@@ -219,6 +220,7 @@ export function createUi() {
     touchJoystick,
     touchJoystickThumb,
     touchJumpButton,
+    touchRoadsterButton,
     touchZoomInButton,
     touchZoomOutButton
   };

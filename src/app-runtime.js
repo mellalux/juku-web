@@ -5,6 +5,7 @@ import { updateJukuPoseRuntime, updateJukuRuntime } from "./juku-runtime.js";
 export function createAppRuntime({
   state,
   footballGame,
+  roadster,
   juku,
   pickupSceneObjects,
   camera,
@@ -12,6 +13,7 @@ export function createAppRuntime({
   cameraStatus,
   faceStatus,
   updateTouchEquipLabel,
+  updateTouchRoadsterLabel,
   adjustTouchZoom,
   getCameraDolly,
   dollyCameraTowards,
@@ -25,7 +27,9 @@ export function createAppRuntime({
     updateJukuRuntime(dt, {
       state,
       footballGame,
+      roadster,
       updateTouchEquipLabel,
+      updateTouchRoadsterLabel,
       resolveJukuCollisions,
       clampGoalInteriorPosition
     });
@@ -46,7 +50,7 @@ export function createAppRuntime({
   }
 
   function updateJukuPose() {
-    updateJukuPoseRuntime({ state, juku, footballGame, pickupSceneObjects, faceStatus });
+    updateJukuPoseRuntime({ state, juku, footballGame, roadster, pickupSceneObjects, faceStatus });
   }
 
   return {

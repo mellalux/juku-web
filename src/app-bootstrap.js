@@ -63,6 +63,7 @@ export async function bootApp() {
     touchJoystick,
     touchJoystickThumb,
     touchJumpButton,
+    touchRoadsterButton,
     touchZoomInButton,
     touchZoomOutButton
   } = createUi();
@@ -116,10 +117,13 @@ export async function bootApp() {
   const floor = buildFloor();
   scene.add(floor);
 
-  const runningTrack = buildRunningTrack();
+  const trackColliders = [];
+  const runningTrack = buildRunningTrack({ extraColliders: trackColliders });
+  const roadster = runningTrack.userData?.roadster ?? null;
   scene.add(runningTrack);
 
   const footballGame = buildFootballGame(worldCharacterData);
+  footballGame.colliders.push(...trackColliders);
   footballGame.kickoffTeam = Math.random() < 0.5 ? 1 : -1;
   scene.add(footballGame.group);
 
@@ -191,7 +195,8 @@ export async function bootApp() {
     adjustTouchZoom,
     dollyCameraTowards,
     getCameraDolly,
-    updateTouchEquipLabel
+    updateTouchEquipLabel,
+    updateTouchRoadsterLabel
   } = setupUiInputSystem({
     state,
     camera,
@@ -210,6 +215,7 @@ export async function bootApp() {
     touchJoystick,
     touchJoystickThumb,
     touchJumpButton,
+    touchRoadsterButton,
     touchZoomInButton,
     touchZoomOutButton,
     setFootballBehaviorPreset
@@ -222,6 +228,7 @@ export async function bootApp() {
   } = createAppRuntime({
     state,
     footballGame,
+    roadster,
     juku,
     pickupSceneObjects,
     camera,
@@ -229,6 +236,7 @@ export async function bootApp() {
     cameraStatus,
     faceStatus,
     updateTouchEquipLabel,
+    updateTouchRoadsterLabel,
     adjustTouchZoom,
     getCameraDolly,
     dollyCameraTowards,

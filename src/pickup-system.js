@@ -27,7 +27,6 @@ function getSwordState(state) {
 
 function canPickUpBall(footballGame) {
   return Boolean(footballGame?.ball)
-    && !footballGame.ballHolder
     && !footballGame.refRestart?.active
     && !footballGame.goalPending
     && !footballGame.celebration?.active

@@ -151,7 +151,9 @@ export function updateScoreboardView({ game, scoreStatus, attackStatus, playerSt
   }
   if (!playerStatus) return;
 
-  if (game.ballHolder) {
+  if (game.jukuBallHeld) {
+    setScoreboardLineView(playerStatus, "scoreboard-player", "", "Ball: Juku");
+  } else if (game.ballHolder) {
     setScoreboardLineView(
       playerStatus,
       "scoreboard-player",

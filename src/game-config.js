@@ -160,6 +160,7 @@ export function createInitialState() {
     keys: new Set(),
     prevEnter: false,
     prevE: false,
+    prevA: false,
     jumpState: 0,
     jumpTimer: 0,
     jumpY: 0,
@@ -213,6 +214,7 @@ export function createInitialState() {
     touchTurn: 0,
     touchJump: false,
     touchETrigger: false,
+    touchRoadsterTrigger: false,
     touchPointerId: null,
     touchJumpPointerId: null,
     pointerX: 0,
@@ -236,6 +238,23 @@ export function createInitialState() {
     pauseFootball: false,
     pauseTrack: false,
     trackTimer: 0,
+    roadster: {
+      nearby: false,
+      phase: "idle",
+      timer: 0,
+      doorOpen: 0,
+      poseBlend: 0,
+      rootY: null,
+      fromX: 0,
+      fromZ: 0,
+      fromYaw: 0,
+      fromDoorOpen: 0,
+      fromPoseBlend: 0,
+      fromRootY: null,
+      driveSpeed: 0,
+      steer: 0,
+      wheelSpin: 0
+    },
     lastT: performance.now()
   };
 }
