@@ -109,7 +109,8 @@ function getFootballRefGoalLaneTargets(routeState, currentX, goalSide, alignX) {
   const laneSide = getFootballRefGoalLaneSide(routeState, currentX, alignX);
   const laneX = laneSide * (FOOTBALL_REF_GOAL_HALF_WIDTH + FOOTBALL_REF_GOAL_LANE_CLEARANCE);
   const mouthHalfWidth = Math.max(1.42, FOOTBALL_REF_GOAL_HALF_WIDTH - COACH_PERSON_RADIUS - 0.18);
-  const mouthX = THREE.MathUtils.clamp(alignX, -mouthHalfWidth, mouthHalfWidth);
+  const centeredMouthX = THREE.MathUtils.clamp(alignX * 0.34, -1.12, 1.12);
+  const mouthX = THREE.MathUtils.clamp(centeredMouthX, -mouthHalfWidth, mouthHalfWidth);
   return {
     laneSide,
     frontGate: { x: laneX, z: goalSide * (FOOTBALL_REF_GOAL_LINE - FOOTBALL_REF_GOAL_FRONT_GATE_CLEARANCE) },
@@ -119,46 +120,106 @@ function getFootballRefGoalLaneTargets(routeState, currentX, goalSide, alignX) {
   };
 }
 
+function getFootballRefGoalPocketEscapeTarget(currentX, goalSide) {
+  return {
+    x: THREE.MathUtils.clamp(currentX * 0.4, -1.36, 1.36),
+    z: goalSide * (FOOTBALL_REF_GOAL_LINE + Math.min(0.96, FOOTBALL_GOAL_DEPTH * 0.38))
+  };
+}
+
+function getFootballRefGoalPocketBridgeTarget(targetX, targetZ, goalSide) {
+  const bridgeHalfWidth = Math.max(1.34, FOOTBALL_REF_GOAL_HALF_WIDTH - COACH_PERSON_RADIUS - 0.42);
+  const targetDepth = Math.abs(targetZ) - FOOTBALL_REF_GOAL_LINE;
+  const bridgeDepth = FOOTBALL_REF_GOAL_LINE + THREE.MathUtils.clamp(targetDepth * 0.52, 0.88, 1.14);
+  return {
+    x: THREE.MathUtils.clamp(targetX * 0.62, -bridgeHalfWidth, bridgeHalfWidth),
+    z: goalSide * bridgeDepth
+  };
+}
+
+function getFootballRefGoalPocketCornerApproachTarget(targetX, targetZ, goalSide) {
+  const approachHalfWidth = Math.max(1.62, FOOTBALL_REF_GOAL_HALF_WIDTH - COACH_PERSON_RADIUS - 0.2);
+  const targetDepth = Math.abs(targetZ) - FOOTBALL_REF_GOAL_LINE;
+  const approachDepth = FOOTBALL_REF_GOAL_LINE + THREE.MathUtils.clamp(targetDepth * 0.72, 1.02, 1.42);
+  return {
+    x: THREE.MathUtils.clamp(targetX * 0.84, -approachHalfWidth, approachHalfWidth),
+    z: goalSide * approachDepth
+  };
+}
+
 function getFootballRefRouteSearchConfig(routeState) {
   const goalRouteActive = Boolean(routeState?.goalRouteKind);
   const stage = routeState?.goalRouteStage ?? "";
+  const tightGoalStage = goalRouteActive && (
+    stage === "cornerEscape"
+    || stage === "goalPocketBridge"
+    || stage === "goalPocketCornerApproach"
+    || stage === "carryCornerEscape"
+    || stage === "mouthFront"
+    || stage === "mouthInside"
+    || stage === "pickup"
+  );
   const wideGoalStage = goalRouteActive && (
     stage === "escapeInside"
     || stage === "escapeFront"
     || stage === "frontGate"
     || stage === "backGate"
+    || stage === "resetBackGate"
+    || stage === "resetFrontGate"
     || stage === "directBehindGoal"
     || stage === "carryExitBack"
     || stage === "carryExitFront"
     || stage === "carryBehindGoalDirect"
   );
   return {
-    staticPadding: wideGoalStage ? 0.34 : goalRouteActive ? 0.31 : 0.28,
-    dynamicPadding: wideGoalStage ? 0.42 : goalRouteActive ? 0.38 : 0.34,
-    waypointReachDist: wideGoalStage ? 1.02 : goalRouteActive ? 0.94 : 0.84,
-    maxTargetShift: wideGoalStage ? 6.4 : goalRouteActive ? 5.4 : 4.2,
-    searchArcScale: wideGoalStage ? 2.45 : goalRouteActive ? 2.05 : 1.72,
-    stallFrameLimit: wideGoalStage ? 8 : goalRouteActive ? 10 : 12,
-    stallMoveThreshold: wideGoalStage ? 0.032 : 0.026,
-    stallProgressThreshold: wideGoalStage ? 0.02 : 0.016,
-    recoverMoveThreshold: wideGoalStage ? 0.08 : 0.065,
-    recoverProgressThreshold: wideGoalStage ? 0.07 : 0.058,
-    maxRetryCount: wideGoalStage ? 8 : goalRouteActive ? 7 : 6
+    staticPadding: tightGoalStage ? 0.22 : wideGoalStage ? 0.34 : goalRouteActive ? 0.31 : 0.28,
+    dynamicPadding: tightGoalStage ? 0.34 : wideGoalStage ? 0.42 : goalRouteActive ? 0.38 : 0.34,
+    waypointReachDist: tightGoalStage ? 0.98 : wideGoalStage ? 1.02 : goalRouteActive ? 0.94 : 0.84,
+    maxTargetShift: tightGoalStage ? 7.2 : wideGoalStage ? 6.4 : goalRouteActive ? 5.4 : 4.2,
+    searchArcScale: tightGoalStage ? 2.9 : wideGoalStage ? 2.45 : goalRouteActive ? 2.05 : 1.72,
+    stallFrameLimit: tightGoalStage ? 7 : wideGoalStage ? 8 : goalRouteActive ? 10 : 12,
+    stallMoveThreshold: tightGoalStage ? 0.03 : wideGoalStage ? 0.032 : 0.026,
+    stallProgressThreshold: tightGoalStage ? 0.018 : wideGoalStage ? 0.02 : 0.016,
+    recoverMoveThreshold: tightGoalStage ? 0.082 : wideGoalStage ? 0.08 : 0.065,
+    recoverProgressThreshold: tightGoalStage ? 0.072 : wideGoalStage ? 0.07 : 0.058,
+    maxRetryCount: tightGoalStage ? 10 : wideGoalStage ? 8 : goalRouteActive ? 7 : 6
   };
 }
 
-export function getFootballRefPickupTargetRuntime(ballX, ballZ) {
+function getFootballRefPickupProfile(ballX, ballZ) {
   const ballMeta = getFootballRefGoalMeta(ballX, ballZ);
   if (!ballMeta.inGoalPocket) {
-    return { x: ballX, z: ballZ };
+    return {
+      target: { x: ballX, z: ballZ },
+      reachDist: COACH_PERSON_RADIUS + 0.24 + 0.22
+    };
   }
 
   const pickupHalfWidth = Math.max(1.08, FOOTBALL_REF_GOAL_HALF_WIDTH - (COACH_PERSON_RADIUS + 0.12));
   const pickupMaxDepth = FOOTBALL_REF_GOAL_LINE + FOOTBALL_GOAL_DEPTH - (COACH_PERSON_RADIUS + 0.12);
+  const pickupMinDepth = FOOTBALL_REF_GOAL_LINE + 0.28;
+  const clampedX = THREE.MathUtils.clamp(ballX, -pickupHalfWidth, pickupHalfWidth);
+  const clampedDepth = THREE.MathUtils.clamp(ballMeta.depth, pickupMinDepth, pickupMaxDepth);
+  const sideCornerT = THREE.MathUtils.clamp((Math.abs(clampedX) - (pickupHalfWidth - 0.34)) / 0.72, 0, 1);
+  const backCornerT = THREE.MathUtils.clamp((clampedDepth - (pickupMaxDepth - 0.34)) / 0.72, 0, 1);
+  const inwardX = clampedX * (1 - sideCornerT * 0.16 - backCornerT * 0.08);
+  const inwardDepth = clampedDepth - (backCornerT * 0.18 + sideCornerT * 0.1);
+  const reachDist = COACH_PERSON_RADIUS + 0.24 + 0.5 + Math.max(sideCornerT, backCornerT) * 0.22;
   return {
-    x: THREE.MathUtils.clamp(ballX, -pickupHalfWidth, pickupHalfWidth),
-    z: ballMeta.side * THREE.MathUtils.clamp(ballMeta.depth, FOOTBALL_REF_GOAL_LINE + 0.28, pickupMaxDepth)
+    target: {
+      x: THREE.MathUtils.clamp(inwardX, -pickupHalfWidth, pickupHalfWidth),
+      z: ballMeta.side * THREE.MathUtils.clamp(inwardDepth, pickupMinDepth, pickupMaxDepth)
+    },
+    reachDist
   };
+}
+
+export function getFootballRefPickupTargetRuntime(ballX, ballZ) {
+  return getFootballRefPickupProfile(ballX, ballZ).target;
+}
+
+export function getFootballRefPickupReachRuntime(ballX, ballZ) {
+  return getFootballRefPickupProfile(ballX, ballZ).reachDist;
 }
 
 function isNearFootballRefTarget(currentX, currentZ, target, tolX = 0.6, tolZ = 0.75) {
@@ -180,6 +241,35 @@ function getFootballRefRestartPathTarget(game, restart, currentX, currentZ, ball
   }
 
   const pickup = getFootballRefPickupTargetRuntime(ballX, ballZ);
+  const retryCount = game.coach?.routeRetryState?.retryCount ?? 0;
+  const currentStage = restart?.goalRouteStage ?? "";
+  const currentCorneredInGoal = currentMeta.inGoalPocket && (
+    Math.abs(currentX) > FOOTBALL_REF_GOAL_HALF_WIDTH - COACH_PERSON_RADIUS - 0.34
+    || currentMeta.depth > FOOTBALL_REF_GOAL_LINE + FOOTBALL_GOAL_DEPTH - COACH_PERSON_RADIUS - 0.34
+  );
+  const needsInteriorBridge = currentMeta.inGoalPocket
+    && ballMeta.inGoalPocket
+    && (
+      currentCorneredInGoal
+      || Math.abs(currentX - pickup.x) > 1.65
+      || (retryCount >= 1 && currentStage === "pickup")
+    );
+  const pickupCornered = ballMeta.inGoalPocket && (
+    Math.abs(pickup.x) > FOOTBALL_REF_GOAL_HALF_WIDTH - COACH_PERSON_RADIUS - 0.64
+    || Math.abs(ballZ) > FOOTBALL_REF_GOAL_LINE + FOOTBALL_GOAL_DEPTH - COACH_PERSON_RADIUS - 0.48
+  );
+  const shouldForceNewLap = ballMeta.inGoalPocket
+    && retryCount >= 2
+    && (
+      currentMeta.behindGoal
+      || currentStage === "pickup"
+      || currentStage === "mouthFront"
+      || currentStage === "mouthInside"
+    );
+  if (shouldForceNewLap) {
+    const laneSide = getFootballRefGoalLaneSide(restart, currentX, pickup.x);
+    restart.goalRouteSide = -laneSide;
+  }
   const {
     laneSide,
     frontGate,
@@ -189,6 +279,30 @@ function getFootballRefRestartPathTarget(game, restart, currentX, currentZ, ball
   } = getFootballRefGoalLaneTargets(restart, currentX, ballMeta.side || Math.sign(currentZ || 1) || 1, pickup.x);
 
   if (ballMeta.inGoalPocket) {
+    if (shouldForceNewLap) {
+      if (currentMeta.behindGoal && !isNearFootballRefTarget(currentX, currentZ, backGate, 0.82, 0.94)) {
+        setFootballRefRouteStage(restart, "goalPocket", "resetBackGate");
+        return { target: backGate, dynamicBlockers: dynamicPlayerBlockers };
+      }
+      if (!isNearFootballRefTarget(currentX, currentZ, frontGate, 0.82, 0.94)) {
+        setFootballRefRouteStage(restart, "goalPocket", "resetFrontGate");
+        return { target: frontGate, dynamicBlockers: dynamicPlayerBlockers };
+      }
+    }
+    if (needsInteriorBridge) {
+      const bridgeTarget = getFootballRefGoalPocketBridgeTarget(pickup.x, ballZ, ballMeta.side || Math.sign(currentZ || 1) || 1);
+      if (!isNearFootballRefTarget(currentX, currentZ, bridgeTarget, 0.58, 0.76)) {
+        setFootballRefRouteStage(restart, "goalPocket", "goalPocketBridge");
+        return { target: bridgeTarget, dynamicBlockers: dynamicPlayerBlockers };
+      }
+    }
+    if (pickupCornered) {
+      const cornerApproachTarget = getFootballRefGoalPocketCornerApproachTarget(pickup.x, ballZ, ballMeta.side || Math.sign(currentZ || 1) || 1);
+      if (!isNearFootballRefTarget(currentX, currentZ, cornerApproachTarget, 0.54, 0.72)) {
+        setFootballRefRouteStage(restart, "goalPocket", "goalPocketCornerApproach");
+        return { target: cornerApproachTarget, dynamicBlockers: dynamicPlayerBlockers };
+      }
+    }
     setFootballRefRouteStage(restart, "goalPocket", "pickup");
     if (currentMeta.behindGoal) {
       if (!isNearFootballRefTarget(currentX, currentZ, backGate, 0.74, 0.86)) {
@@ -264,6 +378,18 @@ function getFootballRefCarryPathTarget(game, routeState, currentX, currentZ, tar
     return { target: { x: targetX, z: targetZ }, dynamicBlockers: routeBlockers };
   }
 
+  const corneredInGoal = currentMeta.inGoalPocket && (
+    Math.abs(currentX) > FOOTBALL_REF_GOAL_HALF_WIDTH - COACH_PERSON_RADIUS - 0.34
+    || currentMeta.depth > FOOTBALL_REF_GOAL_LINE + FOOTBALL_GOAL_DEPTH - COACH_PERSON_RADIUS - 0.34
+  );
+  if (corneredInGoal) {
+    const cornerEscape = getFootballRefGoalPocketEscapeTarget(currentX, goalSide);
+    if (!isNearFootballRefTarget(currentX, currentZ, cornerEscape, 0.56, 0.74)) {
+      setFootballRefRouteStage(routeState, "carryGoalPocket", "carryCornerEscape");
+      return { target: cornerEscape, dynamicBlockers: routeBlockers };
+    }
+  }
+
   setFootballRefRouteStage(routeState, "carryGoalPocket", "mouthInside");
   if (!isNearFootballRefTarget(currentX, currentZ, mouthInside, 0.68, 0.8)) {
     return { target: mouthInside, dynamicBlockers: routeBlockers };
@@ -278,6 +404,7 @@ function getFootballRefCarryPathTarget(game, routeState, currentX, currentZ, tar
 
 function getFootballRefLivePlayTarget(game, coach) {
   const ball = game.ball;
+  const ballHolder = game.ballHolder ?? null;
   const attackSide = game.attackingTeam !== 0
     ? game.attackingTeam
     : Math.abs(game.ballVel.z) > 0.12
@@ -294,6 +421,20 @@ function getFootballRefLivePlayTarget(game, coach) {
   const sidelineAnchorX = coach.sidelineSide * (FOOTBALL_FIELD_HALF_WIDTH - 1.9);
   let targetX = THREE.MathUtils.lerp(ball.position.x * 0.28, sidelineAnchorX, 0.72);
   let targetZ = ball.position.z - attackSide * 4.35;
+  if (ballHolder) {
+    const carrierX = ballHolder.runner.root.position.x;
+    const carrierZ = ballHolder.runner.root.position.z;
+    const carrierSpeed = Math.hypot(ballHolder.vx ?? 0, ballHolder.vz ?? 0);
+    targetX = THREE.MathUtils.lerp(targetX, coach.sidelineSide * (FOOTBALL_FIELD_HALF_WIDTH - 1.15), 0.24);
+    targetZ = THREE.MathUtils.lerp(
+      targetZ,
+      carrierZ - attackSide * (5.25 + Math.min(1.2, carrierSpeed * 0.24)),
+      0.72
+    );
+    if (Math.abs(targetX - carrierX) < 2.8) {
+      targetX += coach.sidelineSide * (2.1 + Math.min(0.8, carrierSpeed * 0.12));
+    }
+  }
   let attackingPlayerCount = 0;
   let deepestAttackDepth = -Infinity;
   let supportDepthSum = 0;
@@ -332,6 +473,23 @@ function getFootballRefLivePlayTarget(game, coach) {
     pushZ += nz * strength;
   }
 
+  if (ballHolder) {
+    const carrierX = ballHolder.runner.root.position.x;
+    const carrierZ = ballHolder.runner.root.position.z;
+    const carrierSpeed = Math.hypot(ballHolder.vx ?? 0, ballHolder.vz ?? 0);
+    const safeCarrierRadius = FOOTBALL_REFEREE_BALL_SAFE_RADIUS + 1.35 + Math.min(1.3, carrierSpeed * 0.26);
+    const carrierDx = targetX - carrierX;
+    const carrierDz = targetZ - carrierZ;
+    const carrierDist = Math.hypot(carrierDx, carrierDz);
+    if (carrierDist < safeCarrierRadius) {
+      const nx = carrierDist > 0.001 ? carrierDx / carrierDist : coach.sidelineSide || 1;
+      const nz = carrierDist > 0.001 ? carrierDz / carrierDist : -attackSide;
+      const strength = (safeCarrierRadius - carrierDist) * 1.35;
+      pushX += nx * strength;
+      pushZ += nz * strength;
+    }
+  }
+
   const laneLenSq = game.ballVel.x * game.ballVel.x + game.ballVel.z * game.ballVel.z;
   if (laneLenSq > 0.08 * 0.08) {
     const laneLen = Math.sqrt(laneLenSq);
@@ -357,14 +515,24 @@ function getFootballRefLivePlayTarget(game, coach) {
   for (let i = 0; i < game.players.length; i += 1) {
     const player = game.players[i];
     const playDist = Math.hypot(player.runner.root.position.x - ball.position.x, player.runner.root.position.z - ball.position.z);
-    const avoidRadius = playDist < 2.8 ? 1.95 : 1.2;
+    const avoidRadius = player === ballHolder
+      ? 2.8
+      : playDist < 2.8
+        ? 1.95
+        : 1.2;
     const dx = targetX - player.runner.root.position.x;
     const dz = targetZ - player.runner.root.position.z;
     const dist = Math.hypot(dx, dz);
     if (dist >= avoidRadius) continue;
     const nx = dist > 0.001 ? dx / dist : coach.sidelineSide || 1;
     const nz = dist > 0.001 ? dz / dist : -attackSide;
-    const strength = (avoidRadius - dist) * (playDist < 2.8 ? 1.35 : 0.8);
+    const strength = (avoidRadius - dist) * (
+      player === ballHolder
+        ? 1.85
+        : playDist < 2.8
+          ? 1.35
+          : 0.8
+    );
     pushX += nx * strength;
     pushZ += nz * strength;
   }

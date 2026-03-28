@@ -1,4 +1,4 @@
-const CACHE_NAME = "juku-pwa-v0.1.1";
+const CACHE_NAME = "juku-pwa-v0.1.2";
 const PRECACHE_URLS = [
   "/",
   "/app-icons/apple-touch-icon.png",

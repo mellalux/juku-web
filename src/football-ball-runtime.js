@@ -1,6 +1,9 @@
 import * as THREE from "./three.js";
 import { getFootballKickoffReadyPlayers } from "./football-flow.js";
-import { getFootballRefPickupTargetRuntime } from "./football-referee-runtime.js";
+import {
+  getFootballRefPickupReachRuntime,
+  getFootballRefPickupTargetRuntime
+} from "./football-referee-runtime.js";
 import {
   ATHLETE_BALL_REACH,
   ARCADE_KEEPER_NERF,
@@ -162,12 +165,7 @@ export function updateFootballBallRuntime(game, dt, deps) {
       const refPickupDx = game.coach ? pickupTarget.x - game.coach.runner.root.position.x : 0;
       const refPickupDz = game.coach ? pickupTarget.z - game.coach.runner.root.position.z : 0;
       const refDistToPickup = Math.hypot(refPickupDx, refPickupDz);
-      const ballInsideGoalPocket = Math.abs(game.refRestart.ballZ) > FOOTBALL_FIELD_HALF_LENGTH - 0.9 + 0.06
-        && Math.abs(game.refRestart.ballZ) < FOOTBALL_FIELD_HALF_LENGTH - 0.9 + FOOTBALL_GOAL_DEPTH - 0.12
-        && Math.abs(game.refRestart.ballX) < FOOTBALL_GOAL_WIDTH * 0.5 - 0.12;
-      const refPickupDist = ballInsideGoalPocket
-        ? COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.5
-        : COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.22;
+      const refPickupDist = getFootballRefPickupReachRuntime(game.refRestart.ballX, game.refRestart.ballZ);
       if (Math.min(refDistToBall, refDistToPickup) < refPickupDist) {
         game.refRestart.phase = "toCenter";
         game.refRestart.timer = 0;

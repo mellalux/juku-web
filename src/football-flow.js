@@ -13,6 +13,7 @@ import {
 } from "./game-config.js";
 import {
   getFootballRefBallRecoveryTargetRuntime,
+  getFootballRefPickupReachRuntime,
   getFootballRefPickupTargetRuntime,
   getFootballRefTravelTargetRuntime
 } from "./football-referee-runtime.js";
@@ -496,10 +497,7 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
       const pickupDx = pickupTarget.x - game.coach.runner.root.position.x;
       const pickupDz = pickupTarget.z - game.coach.runner.root.position.z;
       const postMovePickupDist = Math.hypot(pickupDx, pickupDz);
-      const ballInGoalPocket = isInsideFootballCelebrationGoalPocket(celebration.ballX ?? 0, celebration.ballZ ?? 0);
-      const refPickupDist = ballInGoalPocket
-        ? COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.5
-        : COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.22;
+      const refPickupDist = getFootballRefPickupReachRuntime(celebration.ballX ?? 0, celebration.ballZ ?? 0);
       const coachMoveSpeed = Math.hypot(game.coach.vx ?? 0, game.coach.vz ?? 0);
       if (coachChasingBall && coachDist > 0.08) {
         const coachYaw = Math.atan2(coachDx, coachDz);
