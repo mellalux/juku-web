@@ -397,6 +397,42 @@ export function animateRunner(runner, speed, cycle, jumpY = 0, specialPose = nul
       trailLeg.rotation.z = -dir * (0.22 * dive) + dir * 0.18 * landing;
     }
 
+    if (kickAmount > 0) {
+      const kickLeg = kickSide > 0 ? runner.leftLegRig : runner.rightLegRig;
+      const plantLeg = kickSide > 0 ? runner.rightLegRig : runner.leftLegRig;
+      const kickArm = kickSide > 0 ? runner.rightArmRig : runner.leftArmRig;
+      const balanceArm = kickSide > 0 ? runner.leftArmRig : runner.rightArmRig;
+      const kickPose = THREE.MathUtils.smoothstep(kickAmount, 0.05, 0.95);
+      const kickDrive = Math.pow(kickPose, 0.72);
+      const kickLift = Math.sin(kickPose * Math.PI) * 0.018 * motionScale;
+      runner.root.position.y += kickLift;
+      runner.torsoPivot.position.x += kickSide * 0.038 * kickDrive;
+      runner.torsoPivot.rotation.x = THREE.MathUtils.lerp(runner.torsoPivot.rotation.x, -0.3, kickDrive);
+      runner.torsoPivot.rotation.z += -kickSide * 0.18 * kickDrive;
+      if (runner.hips) {
+        runner.hips.rotation.y += kickSide * 0.22 * kickDrive;
+        runner.hips.rotation.z += -kickSide * 0.08 * kickDrive;
+      }
+      runner.head.rotation.x = THREE.MathUtils.lerp(runner.head.rotation.x, -0.1, kickDrive * 0.72);
+      runner.head.rotation.z += -kickSide * 0.05 * kickDrive;
+      kickLeg.root.rotation.x = THREE.MathUtils.lerp(kickLeg.root.rotation.x, THREE.MathUtils.degToRad(66), kickDrive);
+      kickLeg.root.rotation.z = THREE.MathUtils.lerp(kickLeg.root.rotation.z, THREE.MathUtils.degToRad(-kickSide * 13), kickDrive * 0.92);
+      kickLeg.kneePivot.rotation.x = THREE.MathUtils.lerp(kickLeg.kneePivot.rotation.x, THREE.MathUtils.degToRad(10), kickDrive);
+      kickLeg.footPivot.rotation.x = THREE.MathUtils.lerp(kickLeg.footPivot.rotation.x, THREE.MathUtils.degToRad(-22), kickDrive);
+      plantLeg.root.rotation.x = THREE.MathUtils.lerp(plantLeg.root.rotation.x, THREE.MathUtils.degToRad(-18), kickDrive * 0.84);
+      plantLeg.root.rotation.z = THREE.MathUtils.lerp(plantLeg.root.rotation.z, THREE.MathUtils.degToRad(kickSide * 10), kickDrive * 0.84);
+      plantLeg.kneePivot.rotation.x = THREE.MathUtils.lerp(plantLeg.kneePivot.rotation.x, THREE.MathUtils.degToRad(34), kickDrive * 0.84);
+      plantLeg.footPivot.rotation.x = THREE.MathUtils.lerp(plantLeg.footPivot.rotation.x, THREE.MathUtils.degToRad(10), kickDrive * 0.84);
+      kickArm.upperPivot.rotation.x = THREE.MathUtils.lerp(kickArm.upperPivot.rotation.x, THREE.MathUtils.degToRad(24), kickDrive);
+      kickArm.upperPivot.rotation.z = THREE.MathUtils.lerp(kickArm.upperPivot.rotation.z, THREE.MathUtils.degToRad(-kickSide * 16), kickDrive);
+      kickArm.upperPivot.rotation.y = THREE.MathUtils.lerp(kickArm.upperPivot.rotation.y, THREE.MathUtils.degToRad(-kickSide * 8), kickDrive * 0.88);
+      kickArm.lowerPivot.rotation.x = THREE.MathUtils.lerp(kickArm.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-30), kickDrive);
+      balanceArm.upperPivot.rotation.x = THREE.MathUtils.lerp(balanceArm.upperPivot.rotation.x, THREE.MathUtils.degToRad(-78), kickDrive);
+      balanceArm.upperPivot.rotation.z = THREE.MathUtils.lerp(balanceArm.upperPivot.rotation.z, THREE.MathUtils.degToRad(kickSide * 28), kickDrive);
+      balanceArm.upperPivot.rotation.y = THREE.MathUtils.lerp(balanceArm.upperPivot.rotation.y, THREE.MathUtils.degToRad(kickSide * 10), kickDrive * 0.84);
+      balanceArm.lowerPivot.rotation.x = THREE.MathUtils.lerp(balanceArm.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-48), kickDrive);
+    }
+
     if (celebrationAmount > 0) {
       const cheerLift = 0.08 + celebrationBounce * 0.12;
       runner.torsoPivot.rotation.x += 0.2 * celebrationAmount;

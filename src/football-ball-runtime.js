@@ -1,7 +1,10 @@
 import * as THREE from "./three.js";
+import { getFootballKickoffReadyPlayers } from "./football-flow.js";
+import { getFootballRefPickupTargetRuntime } from "./football-referee-runtime.js";
 import {
   ATHLETE_BALL_REACH,
   ARCADE_KEEPER_NERF,
+  COACH_PERSON_RADIUS,
   FOOTBALL_BALL_CONTROL_HEIGHT,
   FOOTBALL_BALL_GRAVITY,
   FOOTBALL_BALL_GROUND_BOUNCE,
@@ -67,10 +70,10 @@ function getFootballLateGoalFallbackState(game, prevBallState = null) {
     return null;
   }
   const goalLine = FOOTBALL_FIELD_HALF_LENGTH - 0.9;
-  const goalScorePlane = goalLine + FOOTBALL_BALL_RADIUS * 0.12;
-  const goalHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 + FOOTBALL_BALL_RADIUS * 0.7;
-  const goalBackZ = goalLine + FOOTBALL_GOAL_DEPTH - FOOTBALL_BALL_RADIUS * 1.05;
-  const goalRoofY = FOOTBALL_GOAL_HEIGHT - FOOTBALL_BALL_RADIUS * 0.12;
+  const goalFacePlane = goalLine;
+  const goalScorePlane = goalLine + FOOTBALL_BALL_RADIUS * 0.98;
+  const goalScoreHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 - FOOTBALL_BALL_RADIUS * 0.15;
+  const goalUnderBarCenterY = FOOTBALL_GOAL_HEIGHT - FOOTBALL_BALL_RADIUS * 0.92;
   if (prevBallState) {
     for (const teamSign of [1, -1]) {
       if ((game.overGoalNetTimer ?? 0) > 0.001 && game.overGoalNetTeam === teamSign) continue;
@@ -78,39 +81,18 @@ function getFootballLateGoalFallbackState(game, prevBallState = null) {
       const prevDepth = prevBallState.z * teamSign;
       const travelDepth = goalDepth - prevDepth;
       if (travelDepth > 0.01 && prevDepth <= goalScorePlane + 0.03 && goalDepth >= goalScorePlane + 0.06) {
-        const crossT = THREE.MathUtils.clamp((goalScorePlane - prevDepth) / Math.max(0.0001, travelDepth), 0, 1);
-        const crossX = THREE.MathUtils.lerp(prevBallState.x, game.ball.position.x, crossT);
-        const crossY = THREE.MathUtils.lerp(prevBallState.y, game.ball.position.y, crossT);
-        const legalGoalEntry = Math.abs(crossX) <= goalHalfWidth
-          && crossY <= FOOTBALL_GOAL_HEIGHT + FOOTBALL_BALL_RADIUS * 0.45;
+        const faceCrossT = THREE.MathUtils.clamp((goalFacePlane - prevDepth) / Math.max(0.0001, travelDepth), 0, 1);
+        const faceCrossX = THREE.MathUtils.lerp(prevBallState.x, game.ball.position.x, faceCrossT);
+        const faceCrossY = THREE.MathUtils.lerp(prevBallState.y, game.ball.position.y, faceCrossT);
+        const legalGoalEntry = Math.abs(faceCrossX) <= goalScoreHalfWidth
+          && faceCrossY <= goalUnderBarCenterY;
         if (legalGoalEntry) {
           return createFootballLateGoalState(teamSign, goalDepth, goalScorePlane);
         }
       }
     }
   }
-
-  const teamSign = Math.sign(game.ball.position.z || 0);
-  if (teamSign === 0 || ((game.overGoalNetTimer ?? 0) > 0.001 && game.overGoalNetTeam === teamSign)) {
-    return null;
-  }
-
-  const goalDepth = game.ball.position.z * teamSign;
-  const withinGoalVolume = goalDepth >= goalScorePlane + 0.04
-    && goalDepth <= goalBackZ + 0.04
-    && Math.abs(game.ball.position.x) <= goalHalfWidth - 0.02
-    && game.ball.position.y <= goalRoofY + FOOTBALL_BALL_RADIUS * 0.55;
-  if (!withinGoalVolume) {
-    return null;
-  }
-
-  const clearlyInsideGoal = goalDepth >= goalScorePlane + 0.18;
-  const lowGoalBall = game.ball.position.y <= FOOTBALL_BALL_RADIUS + 0.58
-    && Math.abs(game.ballVel.y) < 0.34;
-  if (!clearlyInsideGoal || !lowGoalBall) {
-    return null;
-  }
-  return createFootballLateGoalState(teamSign, goalDepth, goalScorePlane);
+  return null;
 }
 
 function getFootballRefCarryWorldPosition(game, out = FOOTBALL_REF_CARRY_WORLD) {
@@ -146,23 +128,23 @@ export function updateFootballBallRuntime(game, dt, deps) {
   game.kickoffScriptTimer = Math.max(0, (game.kickoffScriptTimer ?? 0) - dt);
   game.kickoffReleaseTimer = Math.max(0, (game.kickoffReleaseTimer ?? 0) - dt);
   game.overGoalNetTimer = Math.max(0, (game.overGoalNetTimer ?? 0) - dt);
+  const deadBallRefPickupActive = Boolean(game.refRestart?.active && game.refRestart.phase === "toBall");
   if ((game.kickoffReleaseTimer ?? 0) <= 0.001) {
     game.kickoffReleaseTimer = 0;
     game.kickoffReceiver = null;
-  }
-  if ((game.overGoalNetTimer ?? 0) <= 0.001) {
-    game.overGoalNetTimer = 0;
-    game.overGoalNetTeam = 0;
   }
   if (game.refRestart?.active) {
     game.refRestart.timer += dt;
     let kickoffResetReady = true;
     if ((game.refRestart.kind ?? "boundary") === "kickoff") {
-      for (let i = 0; i < game.players.length; i += 1) {
-        const p = game.players[i];
+      const kickoffReady = getFootballKickoffReadyPlayers(game);
+      const readyPlayers = [kickoffReady.taker, kickoffReady.support].filter(Boolean);
+      kickoffResetReady = readyPlayers.length > 0;
+      for (let i = 0; i < readyPlayers.length; i += 1) {
+        const p = readyPlayers[i];
         const kickoffTarget = getFootballKickoffTarget(game, p);
         const distHome = Math.hypot(p.runner.root.position.x - kickoffTarget.x, p.runner.root.position.z - kickoffTarget.z);
-        if (distHome > 0.3 || Math.hypot(p.vx, p.vz) > 0.18) {
+        if (distHome > 0.42 || Math.hypot(p.vx, p.vz) > 0.28) {
           kickoffResetReady = false;
           break;
         }
@@ -171,12 +153,25 @@ export function updateFootballBallRuntime(game, dt, deps) {
     if (game.refRestart.phase === "toBall") {
       game.refRestart.ballX = game.ball.position.x;
       game.refRestart.ballZ = game.ball.position.z;
+      game.refRestart.pickupX = game.refRestart.ballX;
+      game.refRestart.pickupZ = game.refRestart.ballZ;
       const refDx = game.coach ? game.refRestart.ballX - game.coach.runner.root.position.x : 0;
       const refDz = game.coach ? game.refRestart.ballZ - game.coach.runner.root.position.z : 0;
       const refDistToBall = Math.hypot(refDx, refDz);
-      if (refDistToBall < 0.52) {
+      const pickupTarget = getFootballRefPickupTargetRuntime(game.refRestart.ballX, game.refRestart.ballZ);
+      const refPickupDx = game.coach ? pickupTarget.x - game.coach.runner.root.position.x : 0;
+      const refPickupDz = game.coach ? pickupTarget.z - game.coach.runner.root.position.z : 0;
+      const refDistToPickup = Math.hypot(refPickupDx, refPickupDz);
+      const ballInsideGoalPocket = Math.abs(game.refRestart.ballZ) > FOOTBALL_FIELD_HALF_LENGTH - 0.9 + 0.06
+        && Math.abs(game.refRestart.ballZ) < FOOTBALL_FIELD_HALF_LENGTH - 0.9 + FOOTBALL_GOAL_DEPTH - 0.12
+        && Math.abs(game.refRestart.ballX) < FOOTBALL_GOAL_WIDTH * 0.5 - 0.12;
+      const refPickupDist = ballInsideGoalPocket
+        ? COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.5
+        : COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.22;
+      if (Math.min(refDistToBall, refDistToPickup) < refPickupDist) {
         game.refRestart.phase = "toCenter";
         game.refRestart.timer = 0;
+        game.refRestart.goalRouteKind = null;
         snapFootballToRefCarryPosition(game);
       }
     } else if (game.refRestart.phase === "toCenter") {
@@ -185,7 +180,7 @@ export function updateFootballBallRuntime(game, dt, deps) {
         ? Math.hypot(game.refRestart.placeX - game.coach.runner.root.position.x, game.refRestart.placeZ - game.coach.runner.root.position.z)
         : 0;
       const kickoffPlaceReady = (game.refRestart.kind ?? "boundary") === "kickoff"
-        ? (toCenter < 0.75 && (kickoffResetReady || game.refRestart.timer > 1.2))
+        ? (toCenter < 0.75 && (kickoffResetReady || game.refRestart.timer > 0.75))
         : toCenter < 0.55;
       if (kickoffPlaceReady) {
         game.refRestart.phase = "place";
@@ -271,49 +266,69 @@ export function updateFootballBallRuntime(game, dt, deps) {
     }
   }
   const goalLine = FOOTBALL_FIELD_HALF_LENGTH - 0.9;
+  const goalFacePlane = goalLine;
   const goalHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 + FOOTBALL_BALL_RADIUS * 0.7;
   const goalInnerHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 - FOOTBALL_BALL_RADIUS * 0.15;
+  const goalScoreHalfWidth = goalInnerHalfWidth;
   const goalBackZ = goalLine + FOOTBALL_GOAL_DEPTH - FOOTBALL_BALL_RADIUS * 1.05;
   const goalRoofY = FOOTBALL_GOAL_HEIGHT - FOOTBALL_BALL_RADIUS * 0.12;
-  const goalScorePlane = goalLine + FOOTBALL_BALL_RADIUS * 0.12;
-  const applyGoalTopNetBounce = (teamSign, prevX, prevY, prevZ) => {
-    if (game.goalPending?.team === teamSign && game.goalPending.confirmed) {
-      return false;
+  const goalScorePlane = goalLine + FOOTBALL_BALL_RADIUS * 0.98;
+  const goalUnderBarCenterY = FOOTBALL_GOAL_HEIGHT - FOOTBALL_BALL_RADIUS * 0.92;
+  const roofNetFrontDepth = goalLine + FOOTBALL_GOAL_DEPTH * 0.38;
+  const keepNoGoalOverbarTracking = (teamSign) => {
+    if ((game.overGoalNetTeam ?? 0) !== teamSign) return false;
+    const goalDepth = game.ball.position.z * teamSign;
+    const nearGoalInfluence = goalDepth > goalLine - 0.22
+      && goalDepth < FOOTBALL_FIELD_HALF_LENGTH + FOOTBALL_GOAL_DEPTH + 0.72
+      && Math.abs(game.ball.position.x) < goalHalfWidth + 1.2;
+    if (nearGoalInfluence) {
+      game.overGoalNetTimer = Math.max(game.overGoalNetTimer ?? 0, 0.28);
+      return true;
     }
-    const currentY = game.ball.position.y;
-    if (prevY <= goalRoofY + 0.02 || currentY > goalRoofY + 0.02 || game.ballVel.y >= 0) {
-      return false;
-    }
-    const yTravel = currentY - prevY;
-    if (Math.abs(yTravel) < 0.0001) return false;
-
-    const crossT = THREE.MathUtils.clamp((goalRoofY - prevY) / yTravel, 0, 1);
-    const crossX = THREE.MathUtils.lerp(prevX, game.ball.position.x, crossT);
-    const crossDepth = THREE.MathUtils.lerp(prevZ * teamSign, game.ball.position.z * teamSign, crossT);
-    const insideRoofWidth = Math.abs(crossX) <= goalHalfWidth;
-    const insideRoofDepth = crossDepth >= goalLine - FOOTBALL_BALL_RADIUS * 0.15
-      && crossDepth <= goalBackZ + FOOTBALL_BALL_RADIUS * 0.4;
-    if (!insideRoofWidth || !insideRoofDepth) {
-      return false;
-    }
-
-    game.ball.position.x = THREE.MathUtils.clamp(crossX, -goalHalfWidth + 0.08, goalHalfWidth - 0.08);
-    game.ball.position.y = goalRoofY + 0.01;
-    game.ball.position.z = teamSign * THREE.MathUtils.clamp(
-      Math.max(crossDepth + 0.34, FOOTBALL_FIELD_HALF_LENGTH + FOOTBALL_BALL_RADIUS * 0.7),
-      FOOTBALL_FIELD_HALF_LENGTH + FOOTBALL_BALL_RADIUS * 0.45,
-      goalBackZ + 0.12
-    );
-    game.ballVel.x *= 0.78;
-    game.ballVel.z = teamSign * Math.max(Math.abs(game.ballVel.z) * 0.86, 1.42);
-    game.ballVel.y = Math.max(0.46, Math.abs(game.ballVel.y) * 0.2);
+    return false;
+  };
+  const keepingRedNoGoal = deadBallRefPickupActive ? false : keepNoGoalOverbarTracking(1);
+  const keepingBlueNoGoal = deadBallRefPickupActive ? false : keepNoGoalOverbarTracking(-1);
+  if (deadBallRefPickupActive || ((game.overGoalNetTimer ?? 0) <= 0.001 && !keepingRedNoGoal && !keepingBlueNoGoal)) {
+    game.overGoalNetTimer = 0;
+    game.overGoalNetTeam = 0;
+  }
+  const markNoGoalOverbar = (teamSign) => {
     game.overGoalNetTeam = teamSign;
-    game.overGoalNetTimer = Math.max(game.overGoalNetTimer ?? 0, 2.4);
-    if (game.goalPending && !game.goalPending.confirmed && game.goalPending.team === teamSign) {
-      game.goalPending = null;
+    game.overGoalNetTimer = Math.max(game.overGoalNetTimer ?? 0, 6.2);
+  };
+  const carryNoGoalOverbarMissThroughGoal = (teamSign) => {
+    if (
+      (game.overGoalNetTimer ?? 0) <= 0.001
+      || game.overGoalNetTeam !== teamSign
+      || game.goalPending?.team === teamSign
+    ) {
+      return false;
+    }
+
+    const goalDepth = game.ball.position.z * teamSign;
+    const insideNoGoalCorridor = goalDepth > goalLine + 0.02
+      && goalDepth < goalBackZ + FOOTBALL_BALL_RADIUS * 1.6
+      && Math.abs(game.ball.position.x) < goalHalfWidth + FOOTBALL_BALL_RADIUS * 0.45
+      && game.ballVel.y <= 0.12;
+    if (!insideNoGoalCorridor) {
+      return false;
+    }
+
+    game.overGoalNetTimer = Math.max(game.overGoalNetTimer ?? 0, goalDepth < goalBackZ + 0.14 ? 0.32 : 0.18);
+    // Over-the-bar misses should keep their natural flight path. We only nudge
+    // them just beyond the real end line once they are already dropping there,
+    // so restart logic can pick them up without snapping the ball into the net.
+    if (
+      goalDepth > FOOTBALL_FIELD_HALF_LENGTH - FOOTBALL_BALL_RADIUS * 0.18
+      && game.ball.position.y <= FOOTBALL_BALL_RADIUS + 0.18
+    ) {
+      game.ball.position.z = teamSign * Math.max(goalDepth, FOOTBALL_FIELD_HALF_LENGTH + FOOTBALL_BALL_RADIUS * 0.36);
+      game.ballVel.z = teamSign * Math.max(Math.abs(game.ballVel.z), 0.18);
     }
     return true;
   };
+  const applyGoalTopNetBounce = () => false;
   const detectGoalLineScore = (teamSign, prevX, prevY, prevZ) => {
     const prevDepth = prevZ * teamSign;
     const currentDepth = game.ball.position.z * teamSign;
@@ -321,12 +336,16 @@ export function updateFootballBallRuntime(game, dt, deps) {
     if (travelDepth <= 0) return false;
     if (prevDepth > goalScorePlane || currentDepth < goalScorePlane) return false;
 
-    const crossT = THREE.MathUtils.clamp((goalScorePlane - prevDepth) / Math.max(0.0001, travelDepth), 0, 1);
-    const crossX = THREE.MathUtils.lerp(prevX, game.ball.position.x, crossT);
-    const crossY = THREE.MathUtils.lerp(prevY, game.ball.position.y, crossT);
-    const insideMouth = Math.abs(crossX) <= goalHalfWidth;
-    const underBar = crossY <= FOOTBALL_GOAL_HEIGHT + FOOTBALL_BALL_RADIUS * 0.45;
-    if (!insideMouth || !underBar) return false;
+    const faceCrossT = THREE.MathUtils.clamp((goalFacePlane - prevDepth) / Math.max(0.0001, travelDepth), 0, 1);
+    const faceCrossX = THREE.MathUtils.lerp(prevX, game.ball.position.x, faceCrossT);
+    const faceCrossY = THREE.MathUtils.lerp(prevY, game.ball.position.y, faceCrossT);
+    const insideMouth = Math.abs(faceCrossX) <= goalScoreHalfWidth;
+    const underBar = faceCrossY <= goalUnderBarCenterY;
+    if (!insideMouth) return false;
+    if (!underBar) {
+      markNoGoalOverbar(teamSign);
+      return false;
+    }
 
     game.goalPending = {
       team: teamSign,
@@ -341,7 +360,11 @@ export function updateFootballBallRuntime(game, dt, deps) {
     return true;
   };
   const applyGoalNetPhysics = (teamSign) => {
-    if ((game.overGoalNetTimer ?? 0) > 0.001 && game.overGoalNetTeam === teamSign) {
+    if (
+      (game.overGoalNetTimer ?? 0) > 0.001
+      && game.overGoalNetTeam === teamSign
+      && game.goalPending?.team !== teamSign
+    ) {
       return false;
     }
     const goalDepth = game.ball.position.z * teamSign;
@@ -441,12 +464,22 @@ export function updateFootballBallRuntime(game, dt, deps) {
       }
     }
 
-    const redTopNetBounce = applyGoalTopNetBounce(1, prevBallX, prevBallY, prevBallZ);
-    const blueTopNetBounce = !redTopNetBounce && applyGoalTopNetBounce(-1, prevBallX, prevBallY, prevBallZ);
-    const redGoalScored = !redTopNetBounce && detectGoalLineScore(1, prevBallX, prevBallY, prevBallZ);
-    const blueGoalScored = !redTopNetBounce && !blueTopNetBounce && !redGoalScored && detectGoalLineScore(-1, prevBallX, prevBallY, prevBallZ);
-    const inRedGoal = redGoalScored || applyGoalNetPhysics(1);
-    const inBlueGoal = !inRedGoal && (blueGoalScored || applyGoalNetPhysics(-1));
+    const redTopNetBounce = deadBallRefPickupActive ? false : applyGoalTopNetBounce(1, prevBallX, prevBallY, prevBallZ);
+    const blueTopNetBounce = deadBallRefPickupActive
+      ? false
+      : !redTopNetBounce && applyGoalTopNetBounce(-1, prevBallX, prevBallY, prevBallZ);
+    const redGoalScored = deadBallRefPickupActive
+      ? false
+      : !redTopNetBounce && detectGoalLineScore(1, prevBallX, prevBallY, prevBallZ);
+    const blueGoalScored = deadBallRefPickupActive
+      ? false
+      : !redTopNetBounce && !blueTopNetBounce && !redGoalScored && detectGoalLineScore(-1, prevBallX, prevBallY, prevBallZ);
+    if (!deadBallRefPickupActive) {
+      carryNoGoalOverbarMissThroughGoal(1);
+      carryNoGoalOverbarMissThroughGoal(-1);
+    }
+    const inRedGoal = deadBallRefPickupActive ? false : (redGoalScored || applyGoalNetPhysics(1));
+    const inBlueGoal = deadBallRefPickupActive ? false : (!inRedGoal && (blueGoalScored || applyGoalNetPhysics(-1)));
     if (
       game.goalPending?.confirmed
       && !inRedGoal
@@ -471,17 +504,21 @@ export function updateFootballBallRuntime(game, dt, deps) {
     );
 
   if (!kickoffLocked && (game.kickoffScriptTimer ?? 0) > 0 && (game.restartTeam ?? 0) !== 0) {
-    let taker = null;
-    for (let i = 0; i < game.players.length; i += 1) {
-      const player = game.players[i];
-      if (player.kickoffRole === "taker" && player.team === game.restartTeam) {
-        taker = player;
-        break;
+    const kickoffReady = getFootballKickoffReadyPlayers(game);
+    let taker = kickoffReady.taker;
+    if (!taker) {
+      for (let i = 0; i < game.players.length; i += 1) {
+        const player = game.players[i];
+        if (player.kickoffRole === "taker" && player.team === game.restartTeam) {
+          taker = player;
+          break;
+        }
       }
     }
-    let support = null;
-    let supportDist = Infinity;
-    if (taker) {
+
+    let support = kickoffReady.support;
+    if ((!support || support === taker) && taker) {
+      let supportDist = Infinity;
       for (let i = 0; i < game.players.length; i += 1) {
         const player = game.players[i];
         if (player.team !== game.restartTeam || player === taker || player.role === "keeper") continue;
@@ -495,17 +532,23 @@ export function updateFootballBallRuntime(game, dt, deps) {
         }
       }
     }
-    if (taker && support && game.ball.position.y <= FOOTBALL_BALL_CONTROL_HEIGHT) {
-      const targetX = support.runner.root.position.x + support.vx * 0.18;
-      const targetZ = support.runner.root.position.z + support.vz * 0.18 + taker.team * 0.45;
+    if (taker && game.ball.position.y <= FOOTBALL_BALL_CONTROL_HEIGHT) {
+      const supportAnchorX = support
+        ? support.runner.root.position.x + support.vx * 0.18
+        : THREE.MathUtils.clamp(taker.runner.root.position.x + (taker.team * 1.35), -FOOTBALL_FIELD_HALF_WIDTH * 0.72, FOOTBALL_FIELD_HALF_WIDTH * 0.72);
+      const supportAnchorZ = support
+        ? support.runner.root.position.z + support.vz * 0.18
+        : THREE.MathUtils.clamp(taker.runner.root.position.z + taker.team * 1.8, -FOOTBALL_FIELD_HALF_LENGTH * 0.45, FOOTBALL_FIELD_HALF_LENGTH * 0.45);
+      const targetX = supportAnchorX;
+      const targetZ = supportAnchorZ + taker.team * 0.45;
       const takerBallDist = Math.hypot(
         game.ball.position.x - taker.runner.root.position.x,
         game.ball.position.z - taker.runner.root.position.z
       );
-      const takerReady = takerBallDist < ATHLETE_BALL_REACH + 0.16;
+      const takerReady = takerBallDist < ATHLETE_BALL_REACH + 0.24;
       const runUpWindow = game.kickoffScriptTimer <= 0.46;
-      const prepWindow = game.kickoffScriptTimer <= 0.12;
-      const kickWindow = game.kickoffScriptTimer <= 0.035;
+      const prepWindow = game.kickoffScriptTimer <= 0.16;
+      const kickWindow = game.kickoffScriptTimer <= 0.06;
       game.ballVel.set(0, 0, 0);
       if (runUpWindow && takerReady && prepWindow) {
         taker.kickSide = getFootballFootedness(taker, game.ball, targetX).kickSide;
@@ -542,9 +585,9 @@ export function updateFootballBallRuntime(game, dt, deps) {
         game.kickoffScriptTimer = 0;
         game.kickoffContestTimer = Math.min(game.kickoffContestTimer ?? 0, 0.9);
       } else if (!takerReady) {
-        // Hold the scripted kickoff until the taker actually reaches the ball,
-        // but once they are ready, let the timer continue to the kick.
-        game.kickoffScriptTimer = Math.max(game.kickoffScriptTimer, 0.26);
+        // Keep the taker in the final approach pocket instead of rewinding
+        // them back into a larger run-up loop.
+        game.kickoffScriptTimer = Math.max(game.kickoffScriptTimer, 0.16);
       }
     } else {
       game.kickoffScriptTimer = 0;

@@ -57,7 +57,10 @@ export function updateFootballGameplayRuntime(game, dt, trackDt, context) {
     steerFootballFacing
   });
 
-  if (updateGoalCelebration(game, dt)) return;
+  if (updateGoalCelebration(game, dt)) {
+    resolvePeopleCollisions(game, dt);
+    return;
+  }
 
   const ballRuntime = updateFootballBallRuntime(game, dt, {
     applyFootballKickContact,

@@ -1,12 +1,21 @@
 import * as THREE from "./three.js";
 import {
   FOOTBALL_BALL_RADIUS,
+  COACH_PERSON_RADIUS,
   FOOTBALL_CENTER_CIRCLE_RADIUS,
   FOOTBALL_FIELD_HALF_LENGTH,
   FOOTBALL_FIELD_HALF_WIDTH,
+  FOOTBALL_GOAL_DEPTH,
+  FOOTBALL_GOAL_WIDTH,
+  FOOTBALL_PERSON_RADIUS,
   GOAL_CELEBRATION_DURATION,
   GOAL_OVERLAY_DURATION
 } from "./game-config.js";
+import {
+  getFootballRefBallRecoveryTargetRuntime,
+  getFootballRefPickupTargetRuntime,
+  getFootballRefTravelTargetRuntime
+} from "./football-referee-runtime.js";
 import {
   setElementStylePropertyIfChanged,
   setScoreboardLineView
@@ -15,23 +24,71 @@ import {
 const FOOTBALL_CELEBRATION_CARRY_LOCAL = new THREE.Vector3(0.02, -0.02, 0.12);
 const FOOTBALL_CELEBRATION_CARRY_WORLD = new THREE.Vector3();
 
-function getFootballCentralAttacker(players, team) {
-  let centralAttacker = null;
-  let bestHomeX = Infinity;
-  for (let i = 0; i < players.length; i += 1) {
-    const player = players[i];
-    if (player.team !== team || player.role !== "attacker") continue;
-    const homeX = Math.abs(player.home.x);
-    if (homeX < bestHomeX) {
-      bestHomeX = homeX;
-      centralAttacker = player;
-    }
-  }
-  return centralAttacker;
+function isInsideFootballCelebrationGoalPocket(x, z) {
+  const side = Math.sign(z || 0);
+  if (side === 0) return false;
+  const goalLine = FOOTBALL_FIELD_HALF_LENGTH - 0.9;
+  const depth = z * side;
+  return depth > goalLine + 0.06
+    && depth < goalLine + FOOTBALL_GOAL_DEPTH - 0.12
+    && Math.abs(x) < FOOTBALL_GOAL_WIDTH * 0.5 - 0.12;
 }
 
 function isBetterFootballKickoffCandidate(centerDist, forwardBias, bestCenterDist, bestForwardBias) {
   return centerDist < bestCenterDist || (centerDist === bestCenterDist && forwardBias < bestForwardBias);
+}
+
+export function getFootballKickoffReadyPlayers(game) {
+  const kickoffTeam = game.kickoffTeam || game.restartTeam || 0;
+  if (kickoffTeam === 0) {
+    return { taker: null, support: null, presser: null };
+  }
+
+  let taker = null;
+  let takerCenterDist = Infinity;
+  let takerForwardBias = Infinity;
+  let support = null;
+  let supportCenterDist = Infinity;
+  let supportForwardBias = Infinity;
+  let presser = null;
+  let presserCenterDist = Infinity;
+  let presserForwardBias = Infinity;
+
+  for (let i = 0; i < game.players.length; i += 1) {
+    const player = game.players[i];
+    if (player.role === "keeper") continue;
+    const targetX = player.home.x;
+    const targetZ = player.home.z;
+    const centerDist = Math.hypot(targetX, targetZ);
+    const forwardBias = Math.abs(targetZ);
+    if (player.team === kickoffTeam) {
+      if (isBetterFootballKickoffCandidate(centerDist, forwardBias, takerCenterDist, takerForwardBias)) {
+        taker = player;
+        takerCenterDist = centerDist;
+        takerForwardBias = forwardBias;
+      }
+    } else if (isBetterFootballKickoffCandidate(centerDist, forwardBias, presserCenterDist, presserForwardBias)) {
+      presser = player;
+      presserCenterDist = centerDist;
+      presserForwardBias = forwardBias;
+    }
+  }
+
+  for (let i = 0; i < game.players.length; i += 1) {
+    const player = game.players[i];
+    if (player.team !== kickoffTeam || player.role === "keeper" || player === taker) continue;
+    const targetX = player.home.x;
+    const targetZ = player.home.z;
+    const centerDist = Math.hypot(targetX, targetZ);
+    const forwardBias = Math.abs(targetZ);
+    if (isBetterFootballKickoffCandidate(centerDist, forwardBias, supportCenterDist, supportForwardBias)) {
+      support = player;
+      supportCenterDist = centerDist;
+      supportForwardBias = forwardBias;
+    }
+  }
+
+  return { taker, support, presser };
 }
 
 function getFootballGoalScorerFallback(players, scoringTeam) {
@@ -59,21 +116,33 @@ export function getFootballKickoffTargetFlow(game, player) {
   }
 
   const ownHalfZLimit = player.team === 1 ? -0.28 : 0.28;
-  let x = player.home.x;
-  let z = player.home.z;
+  const scatterX = player.restartScatterX ?? (player.roamX ?? 0) * 1.8;
+  const scatterZ = player.restartScatterZ ?? (player.roamZ ?? 0) * 1.45;
+  const kickoffReady = getFootballKickoffReadyPlayers(game);
+  const isKickoffTaker = player === kickoffReady.taker;
+  const isKickoffSupport = player === kickoffReady.support;
+  const isKickoffPresser = player === kickoffReady.presser;
+  let x = player.home.x + scatterX * 0.55;
+  let z = player.home.z + scatterZ * 0.48;
   const yaw = player.homeYaw ?? (player.team === 1 ? 0 : Math.PI);
 
   if (player.team === kickoffTeam) {
-    if (player === getFootballCentralAttacker(game.players, kickoffTeam)) {
+    if (isKickoffTaker) {
       x = 0;
       z = -player.team * (FOOTBALL_CENTER_CIRCLE_RADIUS + (placementMode === "reset" ? 0.92 : 0.22));
+    } else if (isKickoffSupport) {
+      x = THREE.MathUtils.clamp(Math.sign(player.home.x || -player.team || 1) * 1.65 + scatterX * 0.18, -3.2, 3.2);
+      z = -player.team * (FOOTBALL_CENTER_CIRCLE_RADIUS + (placementMode === "reset" ? 1.42 : 1.08)) + scatterZ * 0.08;
     } else {
-      x = player.home.x * 0.94;
-      z = player.team === 1 ? Math.min(player.home.z, ownHalfZLimit) : Math.max(player.home.z, ownHalfZLimit);
+      x = player.home.x * 0.72 + scatterX * 1.25;
+      z = player.home.z * 0.66 + scatterZ * 1.12;
+      z = player.team === 1 ? Math.min(z, ownHalfZLimit) : Math.max(z, ownHalfZLimit);
     }
     if (placementMode === "reset") {
       const centerDist = Math.hypot(x, z);
-      const stagingKeepoutRadius = FOOTBALL_CENTER_CIRCLE_RADIUS * 0.72;
+      const stagingKeepoutRadius = isKickoffSupport
+        ? FOOTBALL_CENTER_CIRCLE_RADIUS + 0.8
+        : FOOTBALL_CENTER_CIRCLE_RADIUS * 0.72;
       if (centerDist < stagingKeepoutRadius) {
         const nx = x === 0 && z === 0 ? (player.home.x === 0 ? 1 : Math.sign(player.home.x)) : x / Math.max(0.001, centerDist);
         const nz = x === 0 && z === 0 ? -player.team : z / Math.max(0.001, centerDist);
@@ -83,12 +152,13 @@ export function getFootballKickoffTargetFlow(game, player) {
       }
     }
   } else {
-    if (player === getFootballCentralAttacker(game.players, -kickoffTeam)) {
-      x = 0;
-      z = -player.team * (FOOTBALL_CENTER_CIRCLE_RADIUS + (placementMode === "reset" ? 0.92 : 0.22));
+    if (isKickoffPresser) {
+      x = Math.sign(player.home.x || player.team || 1) * 1.35;
+      z = -player.team * (FOOTBALL_CENTER_CIRCLE_RADIUS + (placementMode === "reset" ? 1.18 : 0.94));
     } else {
-      x = player.home.x * 0.96;
-      z = player.team === 1 ? Math.min(player.home.z, ownHalfZLimit) : Math.max(player.home.z, ownHalfZLimit);
+      x = player.home.x * 0.74 + scatterX * 1.28;
+      z = player.home.z * 0.68 + scatterZ * 1.14;
+      z = player.team === 1 ? Math.min(z, ownHalfZLimit) : Math.max(z, ownHalfZLimit);
       const centerDist = Math.hypot(x, z);
       const keepoutRadius = FOOTBALL_CENTER_CIRCLE_RADIUS + 0.45;
       if (centerDist < keepoutRadius) {
@@ -128,9 +198,13 @@ export function resetFootballKickoffFlow(game, snapPlayers = true, clearCelebrat
   if (game.coach) {
     game.coach.lastBallHolder = null;
     game.coach.lastControllingTeam = 0;
+    game.coach.routeWaypoint = null;
   }
   for (let i = 0; i < game.players.length; i += 1) {
     const p = game.players[i];
+    p.routeWaypoint = null;
+    p.restartScatterX = (Math.random() - 0.5) * (p.role === "attacker" ? 7.4 : p.role === "keeper" ? 0.5 : 5.8);
+    p.restartScatterZ = (Math.random() - 0.5) * (p.role === "attacker" ? 4.4 : p.role === "keeper" ? 0.35 : 3.3);
     const kickoffTarget = getFootballKickoffTarget(game, p);
     if (snapPlayers) {
       p.runner.root.position.x = kickoffTarget.x;
@@ -175,47 +249,10 @@ export function resetFootballKickoffFlow(game, snapPlayers = true, clearCelebrat
     p.kickoffTargetZ = kickoffTarget.z;
   }
   if (kickoffTeam !== 0) {
-    let kickoffTaker = null;
-    let kickoffTakerCenterDist = Infinity;
-    let kickoffTakerForwardBias = Infinity;
-    let kickoffSupport = null;
-    let kickoffSupportCenterDist = Infinity;
-    let kickoffSupportForwardBias = Infinity;
-    let kickoffPresser = null;
-    let kickoffPresserCenterDist = Infinity;
-    let kickoffPresserForwardBias = Infinity;
-    for (let i = 0; i < game.players.length; i += 1) {
-      const player = game.players[i];
-      if (player.role === "keeper") continue;
-      const targetX = player.kickoffTargetX ?? player.runner.root.position.x;
-      const targetZ = player.kickoffTargetZ ?? player.runner.root.position.z;
-      const centerDist = Math.hypot(targetX, targetZ);
-      const forwardBias = Math.abs(targetZ);
-      if (player.team === kickoffTeam) {
-        if (isBetterFootballKickoffCandidate(centerDist, forwardBias, kickoffTakerCenterDist, kickoffTakerForwardBias)) {
-          kickoffTaker = player;
-          kickoffTakerCenterDist = centerDist;
-          kickoffTakerForwardBias = forwardBias;
-        }
-      } else if (isBetterFootballKickoffCandidate(centerDist, forwardBias, kickoffPresserCenterDist, kickoffPresserForwardBias)) {
-        kickoffPresser = player;
-        kickoffPresserCenterDist = centerDist;
-        kickoffPresserForwardBias = forwardBias;
-      }
-    }
-    for (let i = 0; i < game.players.length; i += 1) {
-      const player = game.players[i];
-      if (player.team !== kickoffTeam || player.role === "keeper" || player === kickoffTaker) continue;
-      const targetX = player.kickoffTargetX ?? player.runner.root.position.x;
-      const targetZ = player.kickoffTargetZ ?? player.runner.root.position.z;
-      const centerDist = Math.hypot(targetX, targetZ);
-      const forwardBias = Math.abs(targetZ);
-      if (isBetterFootballKickoffCandidate(centerDist, forwardBias, kickoffSupportCenterDist, kickoffSupportForwardBias)) {
-        kickoffSupport = player;
-        kickoffSupportCenterDist = centerDist;
-        kickoffSupportForwardBias = forwardBias;
-      }
-    }
+    const kickoffReady = getFootballKickoffReadyPlayers(game);
+    const kickoffTaker = kickoffReady.taker;
+    const kickoffSupport = kickoffReady.support;
+    const kickoffPresser = kickoffReady.presser;
     if (kickoffTaker) {
       kickoffTaker.kickoffRole = "taker";
       kickoffTaker.kickoffRank = 0;
@@ -319,6 +356,7 @@ export function startGoalCelebrationFlow(game, scoringTeam, scorer, deps) {
     refHasBall: false,
     refTask: "toBall",
     refTaskTimer: 0,
+    refRecovery: null,
     pulse: Math.random() * Math.PI * 2,
     waveSeed: Math.random() * Math.PI * 2,
     orbitSeed: Math.random() * Math.PI * 2
@@ -363,6 +401,10 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
   } = deps;
   const celebration = game.celebration;
   if (!celebration?.active) return false;
+  if (!celebration.refHasBall) {
+    celebration.ballX = game.ball.position.x;
+    celebration.ballZ = game.ball.position.z;
+  }
 
   if (celebration.phase === "awaitKickoff") {
     setElementStylePropertyIfChanged(goalOverlay, "opacity", "0");
@@ -390,12 +432,37 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
     celebration.refTaskTimer = (celebration.refTaskTimer ?? 0) + dt;
     if (game.coach) {
       const coachChasingBall = (celebration.refTask ?? "toBall") === "toBall";
-      const coachTargetX = coachChasingBall ? (celebration.ballX ?? 0) : 0;
-      const coachTargetZ = coachChasingBall ? (celebration.ballZ ?? 0) : 0;
+      const coachTarget = coachChasingBall
+        ? getFootballRefBallRecoveryTargetRuntime(
+            game,
+            celebration.refRecovery ?? (celebration.refRecovery = { goalRouteKind: null, goalRouteSide: null }),
+            game.coach,
+            celebration.ballX ?? 0,
+            celebration.ballZ ?? 0,
+            { clampFootballRefereePosition }
+          )
+        : getFootballRefTravelTargetRuntime(
+            game,
+            game.coach,
+            0,
+            0,
+            {
+              clampFootballRefereePosition,
+              routeState: celebration.refRecovery ?? (celebration.refRecovery = { goalRouteKind: null, goalRouteSide: null }),
+              dynamicBlockers: game.players.map((player) => ({
+                x: player.runner.root.position.x,
+                z: player.runner.root.position.z,
+                r: FOOTBALL_PERSON_RADIUS * 0.92
+              }))
+            }
+          );
+      const coachTargetX = coachTarget.x;
+      const coachTargetZ = coachTarget.z;
       const coachDx = coachTargetX - game.coach.runner.root.position.x;
       const coachDz = coachTargetZ - game.coach.runner.root.position.z;
       const coachDist = Math.hypot(coachDx, coachDz);
-      const coachAtCenterHold = !coachChasingBall && coachDist < 0.48;
+      const coachCenterDist = Math.hypot(game.coach.runner.root.position.x, game.coach.runner.root.position.z);
+      const coachAtCenterHold = !coachChasingBall && coachCenterDist < 0.48;
       if (coachChasingBall) {
         const coachSpeed = coachDist > 10 ? 7.1 : coachDist > 6 ? 5.9 : coachDist > 3 ? 4.5 : coachDist > 1.2 ? 3.1 : coachDist > 0.24 ? 1.45 : 0;
         const coachVx = coachDist > 0.001 ? (coachDx / coachDist) * coachSpeed : 0;
@@ -425,6 +492,14 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
       const postMoveDx = (celebration.ballX ?? 0) - game.coach.runner.root.position.x;
       const postMoveDz = (celebration.ballZ ?? 0) - game.coach.runner.root.position.z;
       const postMoveBallDist = Math.hypot(postMoveDx, postMoveDz);
+      const pickupTarget = getFootballRefPickupTargetRuntime(celebration.ballX ?? 0, celebration.ballZ ?? 0);
+      const pickupDx = pickupTarget.x - game.coach.runner.root.position.x;
+      const pickupDz = pickupTarget.z - game.coach.runner.root.position.z;
+      const postMovePickupDist = Math.hypot(pickupDx, pickupDz);
+      const ballInGoalPocket = isInsideFootballCelebrationGoalPocket(celebration.ballX ?? 0, celebration.ballZ ?? 0);
+      const refPickupDist = ballInGoalPocket
+        ? COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.5
+        : COACH_PERSON_RADIUS + FOOTBALL_BALL_RADIUS + 0.22;
       const coachMoveSpeed = Math.hypot(game.coach.vx ?? 0, game.coach.vz ?? 0);
       if (coachChasingBall && coachDist > 0.08) {
         const coachYaw = Math.atan2(coachDx, coachDz);
@@ -446,13 +521,38 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
       game.coach.runner.leftArm.rotation.z *= 0.72;
       game.coach.runner.rightArm.rotation.z *= 0.72;
       game.coach.runner.torsoPivot.rotation.z *= 0.58;
-      if (coachChasingBall && (postMoveBallDist < 1.2 || (coachDist < 1.6 && (celebration.refTaskTimer ?? 0) > 0.45))) {
+      if (coachChasingBall && Math.min(postMoveBallDist, postMovePickupDist) < refPickupDist) {
         celebration.refHasBall = true;
         celebration.refTask = "toCenter";
         celebration.refTaskTimer = 0;
+        celebration.refRecovery = null;
+        game.coach.routeWaypoint = null;
       }
     }
   }
+
+  if (game.coach && celebration.phase !== "reset") {
+    game.coach.vx = THREE.MathUtils.damp(game.coach.vx ?? 0, 0, 9.5, dt);
+    game.coach.vz = THREE.MathUtils.damp(game.coach.vz ?? 0, 0, 9.5, dt);
+    game.coach.carryBlend = THREE.MathUtils.damp(game.coach.carryBlend ?? 0, 0, 8.5, dt);
+    const lookTargetX = celebration.phase === "celebrate"
+      ? (celebration.spotX ?? celebration.ballX ?? 0)
+      : (celebration.ballX ?? 0);
+    const lookTargetZ = celebration.phase === "celebrate"
+      ? (celebration.spotZ ?? celebration.ballZ ?? 0)
+      : (celebration.ballZ ?? 0);
+    const coachLookYaw = Math.atan2(
+      lookTargetX - game.coach.runner.root.position.x,
+      lookTargetZ - game.coach.runner.root.position.z
+    );
+    game.coach.runner.root.rotation.y = steerFootballFacing(game.coach.runner.root.rotation.y, coachLookYaw, dt, 5.8);
+    game.coach.cycle += dt * 4;
+    animateRunner(game.coach.runner, 0, game.coach.cycle, 0, null);
+    game.coach.runner.leftArm.rotation.z *= 0.72;
+    game.coach.runner.rightArm.rotation.z *= 0.72;
+    game.coach.runner.torsoPivot.rotation.z *= 0.6;
+  }
+
   const elapsed = celebration.duration - celebration.timer;
   const overlayRemaining = GOAL_OVERLAY_DURATION - elapsed;
   if (celebration.phase === "celebrate" && overlayRemaining > 0) {
@@ -466,31 +566,24 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
     setElementStylePropertyIfChanged(goalOverlay, "display", "none");
   }
 
-  if (celebration.phase === "reset") {
-    game.ball.visible = true;
-    if (game.coach && celebration.refHasBall) {
-      if (game.coach.runner.leftArmRig?.handPivot) {
-        game.coach.runner.leftArmRig.handPivot.updateWorldMatrix(true, false);
-        FOOTBALL_CELEBRATION_CARRY_WORLD.copy(FOOTBALL_CELEBRATION_CARRY_LOCAL);
-        game.coach.runner.leftArmRig.handPivot.localToWorld(FOOTBALL_CELEBRATION_CARRY_WORLD);
-        game.ball.position.copy(FOOTBALL_CELEBRATION_CARRY_WORLD);
-        game.ball.position.y = Math.max(game.ball.position.y, FOOTBALL_BALL_RADIUS + 0.72);
-      } else {
-        const carryYaw = game.coach.runner.root.rotation.y;
-        game.ball.position.set(
-          game.coach.runner.root.position.x + Math.sin(carryYaw) * 0.18,
-          FOOTBALL_BALL_RADIUS + 0.78,
-          game.coach.runner.root.position.z + Math.cos(carryYaw) * 0.18
-        );
-      }
+  game.ball.visible = true;
+  if (celebration.phase === "reset" && game.coach && celebration.refHasBall) {
+    if (game.coach.runner.leftArmRig?.handPivot) {
+      game.coach.runner.leftArmRig.handPivot.updateWorldMatrix(true, false);
+      FOOTBALL_CELEBRATION_CARRY_WORLD.copy(FOOTBALL_CELEBRATION_CARRY_LOCAL);
+      game.coach.runner.leftArmRig.handPivot.localToWorld(FOOTBALL_CELEBRATION_CARRY_WORLD);
+      game.ball.position.copy(FOOTBALL_CELEBRATION_CARRY_WORLD);
+      game.ball.position.y = Math.max(game.ball.position.y, FOOTBALL_BALL_RADIUS + 0.72);
     } else {
-      game.ball.position.set(celebration.ballX, FOOTBALL_BALL_RADIUS, celebration.ballZ);
+      const carryYaw = game.coach.runner.root.rotation.y;
+      game.ball.position.set(
+        game.coach.runner.root.position.x + Math.sin(carryYaw) * 0.18,
+        FOOTBALL_BALL_RADIUS + 0.78,
+        game.coach.runner.root.position.z + Math.cos(carryYaw) * 0.18
+      );
     }
-  } else {
-    game.ball.visible = true;
-    game.ball.position.set(celebration.ballX, FOOTBALL_BALL_RADIUS, celebration.ballZ);
+    game.ballVel.set(0, 0, 0);
   }
-  game.ballVel.set(0, 0, 0);
 
   const scorer = celebration.scorer;
   let teammateCount = 0;
@@ -583,7 +676,7 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
       const lookYaw = Math.atan2(lookX - p.runner.root.position.x, lookZ - p.runner.root.position.z);
       p.runner.root.rotation.y = steerFootballFacing(p.runner.root.rotation.y, lookYaw, dt, 4.6);
     }
-    p.kickBlend = Math.max(0, (p.kickBlend ?? 0) - dt * 6.4);
+    p.kickBlend = Math.max(0, (p.kickBlend ?? 0) - dt * 4.8);
     p.cycle += dt * (5.2 + moveSpeed * 2.9 + jumpY * 3.4 + (pose.type === "celebration" ? pose.amount * 1.4 : 0));
     animateRunner(p.runner, moveSpeed, p.cycle, jumpY, pose);
   }
@@ -611,6 +704,8 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
     celebration.refHasBall = false;
     celebration.refTask = "toBall";
     celebration.refTaskTimer = 0;
+    celebration.refRecovery = { goalRouteKind: null, goalRouteSide: null };
+    if (game.coach) game.coach.routeWaypoint = null;
     game.kickoffPlacementMode = "reset";
     if (attackStatus) {
       setScoreboardLineView(attackStatus, "scoreboard-attack", "", "RESETTING SHAPE");
@@ -621,18 +716,21 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
   }
 
   if (celebration.phase === "reset") {
-    let allReady = true;
-    for (let i = 0; i < game.players.length; i += 1) {
-      const p = game.players[i];
+    const kickoffReady = getFootballKickoffReadyPlayers(game);
+    const readyPlayers = [kickoffReady.taker, kickoffReady.support].filter(Boolean);
+    let allReady = readyPlayers.length > 0;
+    for (let i = 0; i < readyPlayers.length; i += 1) {
+      const p = readyPlayers[i];
       const kickoffTarget = getFootballKickoffTarget(game, p);
       const distHome = Math.hypot(p.runner.root.position.x - kickoffTarget.x, p.runner.root.position.z - kickoffTarget.z);
-      if (distHome > 0.28 || Math.hypot(p.vx, p.vz) > 0.16) {
+      if (distHome > 0.4 || Math.hypot(p.vx, p.vz) > 0.26) {
         allReady = false;
         break;
       }
     }
     const coachCenterReady = game.coach ? Math.hypot(game.coach.runner.root.position.x, game.coach.runner.root.position.z) <= 0.85 : true;
-    if (allReady && celebration.refHasBall && coachCenterReady) {
+    const resetTimedOut = (celebration.resetTimer ?? 0) < 3.2;
+    if ((allReady || resetTimedOut) && celebration.refHasBall && coachCenterReady) {
       game.kickoffBallSpot = { x: 0, z: 0 };
       resetFootballKickoff(game, false, false);
       celebration.phase = "awaitKickoff";

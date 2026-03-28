@@ -41,7 +41,8 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     steerFootballFacing
   } = deps;
 
-  if (game.coach && !game.celebration?.active) {
+  const refRestartCelebrationActive = game.celebration?.phase === "awaitKickoff";
+  if (game.coach && (!game.celebration?.active || refRestartCelebrationActive)) {
     game.coach.whistleTimer = Math.max(0, game.coach.whistleTimer - dt);
     game.coach.cardTimer = Math.max(0, game.coach.cardTimer - dt);
     game.coach.cardCooldown = Math.max(0, game.coach.cardCooldown - dt);
@@ -72,10 +73,10 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     game.coach.runner.root.position.x = refClamped.x;
     game.coach.runner.root.position.z = refClamped.z;
     const moveSpeed = Math.hypot(game.coach.vx ?? 0, game.coach.vz ?? 0);
-    const facingTargetX = game.refRestart?.active && game.refRestart.phase !== "toBall"
+    const facingTargetX = game.refRestart?.active
       ? refTarget.x
       : game.ball.position.x;
-    const facingTargetZ = game.refRestart?.active && game.refRestart.phase !== "toBall"
+    const facingTargetZ = game.refRestart?.active
       ? refTarget.z
       : game.ball.position.z;
     const lookDx = facingTargetX - game.coach.runner.root.position.x;

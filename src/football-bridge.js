@@ -32,9 +32,6 @@ import { getTrackLaneLength, getTrackPointAtProgress } from "./track-system.js";
 import {
   FOOTBALL_BALL_RADIUS,
   FOOTBALL_BALL_SPEED_SCALE,
-  FOOTBALL_FIELD_HALF_LENGTH,
-  FOOTBALL_GOAL_DEPTH,
-  FOOTBALL_GOAL_WIDTH,
   FOOTBALL_PERSON_RADIUS,
   WORLD_MOVE_LIMIT
 } from "./game-config.js";
@@ -91,15 +88,7 @@ export function createFootballBridge({
     return out;
   }
 
-  function clampGoalInteriorPosition(x, z, out = {}) {
-    const goalLine = FOOTBALL_FIELD_HALF_LENGTH - 0.9;
-    const goalDepthLimit = goalLine + FOOTBALL_GOAL_DEPTH - 0.38;
-    const goalMouthHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 - 0.18;
-    if (Math.abs(z) > goalLine - 0.02 && Math.abs(x) <= goalMouthHalfWidth + 0.28) {
-      out.x = THREE.MathUtils.clamp(x, -goalMouthHalfWidth, goalMouthHalfWidth);
-      out.z = THREE.MathUtils.clamp(z, -goalDepthLimit, goalDepthLimit);
-      return out;
-    }
+  function clampGoalInteriorPosition(x, z, out = {}, prevX = x, prevZ = z) {
     out.x = THREE.MathUtils.clamp(x, -WORLD_MOVE_LIMIT, WORLD_MOVE_LIMIT);
     out.z = THREE.MathUtils.clamp(z, -WORLD_MOVE_LIMIT, WORLD_MOVE_LIMIT);
     return out;
@@ -293,6 +282,8 @@ export function createFootballBridge({
     game.restartHoldTimer = 0;
     game.kickoffScriptTimer = 0;
     game.kickoffContestTimer = 0;
+    game.overGoalNetTimer = 0;
+    game.overGoalNetTeam = 0;
     game.outOfBoundsTimer = 0;
     game.firstTouchPlayer = null;
     game.firstTouchTimer = 0;
@@ -307,6 +298,12 @@ export function createFootballBridge({
     game.kickoffBallSpot = { x: outX, z: outZ };
     game.kickoffTeam = restartTeamCandidate;
     resetFootballKickoff(game, false, false);
+    if (game.refRestart) {
+      game.refRestart.pickupX = outX;
+      game.refRestart.pickupZ = outZ;
+      game.refRestart.goalRouteKind = null;
+      game.refRestart.goalRouteSide = null;
+    }
     game.ball.visible = true;
     game.ball.position.set(outX, Math.max(FOOTBALL_BALL_RADIUS, liveBallY), outZ);
     game.ballVel.set(liveBallVelX, liveBallVelY, liveBallVelZ);

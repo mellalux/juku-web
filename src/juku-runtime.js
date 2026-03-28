@@ -163,10 +163,12 @@ export function updateJukuRuntime(
   const yawRad = THREE.MathUtils.degToRad(state.yaw);
   const fx = Math.sin(yawRad);
   const fz = Math.cos(yawRad);
+  const prevX = state.x;
+  const prevZ = state.z;
   state.x += fx * JUKU_SPEED * dt * moveInput * moveScale;
   state.z += fz * JUKU_SPEED * dt * moveInput * moveScale;
-  const resolved = resolveJukuCollisions(state.x, state.z, { ignoreGoalColliders: true });
-  clampGoalInteriorPosition(resolved.x, resolved.z, resolved);
+  const resolved = resolveJukuCollisions(state.x, state.z, { prevX, prevZ });
+  clampGoalInteriorPosition(resolved.x, resolved.z, resolved, prevX, prevZ);
   state.x = resolved.x;
   state.z = resolved.z;
 

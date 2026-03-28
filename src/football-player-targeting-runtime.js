@@ -329,15 +329,20 @@ export function getFootballRestartTargetRuntime(context) {
       ? getFootballKickoffTarget(game, p)
       : null;
     if (kickoffResetFlow && refKickoffTarget) {
-      p.runner.root.position.x = refKickoffTarget.x;
-      p.runner.root.position.z = refKickoffTarget.z;
-      p.runner.root.rotation.y = refKickoffTarget.yaw;
-      p.vx = 0;
-      p.vz = 0;
+      const strictReadyRole = p.kickoffRole === "taker" || p.kickoffRole === "support";
       p.shapeTargetX = refKickoffTarget.x;
       p.shapeTargetZ = refKickoffTarget.z;
       targetX = refKickoffTarget.x;
       targetZ = refKickoffTarget.z;
+      if (strictReadyRole) {
+        const readyDist = Math.hypot(p.runner.root.position.x - refKickoffTarget.x, p.runner.root.position.z - refKickoffTarget.z);
+        if (readyDist < 0.18) {
+          p.runner.root.position.x = refKickoffTarget.x;
+          p.runner.root.position.z = refKickoffTarget.z;
+          p.vx = 0;
+          p.vz = 0;
+        }
+      }
     } else {
       const holdX = THREE.MathUtils.clamp(kickoffResetFlow ? (refKickoffTarget?.x ?? p.home.x) : (p.home.x * 0.92), -FOOTBALL_FIELD_HALF_WIDTH + 0.9, FOOTBALL_FIELD_HALF_WIDTH - 0.9);
       const holdZ = THREE.MathUtils.clamp(kickoffResetFlow ? (refKickoffTarget?.z ?? p.home.z) : (p.home.z * 0.92), -FOOTBALL_FIELD_HALF_LENGTH + 0.9, FOOTBALL_FIELD_HALF_LENGTH - 0.9);
@@ -376,14 +381,14 @@ export function getFootballRestartTargetRuntime(context) {
       const pressBias = p.team === kickoffBiasTeam ? 1.04 : 0.98;
       const lateralOffset = isKickoffTaker
         ? takerApproachSide * (scriptedKickoffActive
-          ? (game.kickoffScriptTimer ?? 0) > 0.22 ? 0.12 : 0.04
+          ? (game.kickoffScriptTimer ?? 0) > 0.22 ? 0.12 : 0.02
           : 0.02)
         : 0;
       targetX = game.ball.position.x + lateralOffset;
       targetZ = game.ball.position.z - p.team * (
         isKickoffTaker
           ? scriptedKickoffActive
-            ? (game.kickoffScriptTimer ?? 0) > 0.34 ? 0.72 : (game.kickoffScriptTimer ?? 0) > 0.18 ? 0.34 : 0.06
+            ? (game.kickoffScriptTimer ?? 0) > 0.34 ? 0.72 : (game.kickoffScriptTimer ?? 0) > 0.16 ? 0.22 : 0.01
             : 0.02
           : scriptedKickoffActive
             ? (game.kickoffScriptTimer ?? 0) > 0.22 ? 0.84 : 0.34

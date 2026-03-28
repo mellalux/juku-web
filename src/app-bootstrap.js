@@ -41,9 +41,11 @@ export async function bootApp() {
     goalOverlay,
     goalOverlayScorer,
     goalOverlayTitle,
+    pipCanvas,
     pipFrame,
     playerStatus,
     replayBadge,
+    replayCanvas,
     replayCard,
     replayFlash,
     scoreStatus,
@@ -63,7 +65,15 @@ export async function bootApp() {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  const pipRenderer = new THREE.WebGLRenderer({ canvas: pipCanvas, antialias: true });
+  pipRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  pipRenderer.shadowMap.enabled = true;
+  pipRenderer.shadowMap.type = THREE.PCFShadowMap;
+  const replayRenderer = new THREE.WebGLRenderer({ canvas: replayCanvas, antialias: true });
+  replayRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  replayRenderer.shadowMap.enabled = true;
+  replayRenderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x93c5fd);
@@ -217,12 +227,12 @@ export async function bootApp() {
     renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
     renderer.setScissorTest(false);
     renderer.render(scene, camera);
-    renderCamera3PipView({ state, pipFrame, pipCamera, camera, renderer, scene });
+    renderCamera3PipView({ state, pipFrame, pipCamera, camera, pipRenderer, scene });
     renderGoalReplay3DView({
       state,
       game: footballGame,
       pipCamera,
-      renderer,
+      replayRenderer,
       replayBadge,
       replayCard,
       scene

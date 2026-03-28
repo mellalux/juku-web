@@ -348,7 +348,13 @@ export function updateFootballOutOfBoundsRuntime(game, dt, kickoffLocked, startF
   const outsideByZ = Math.max(0, Math.abs(game.ball.position.z) - FOOTBALL_FIELD_HALF_LENGTH);
   const ballClearlyOut = outsideByX > 0.05 || outsideByZ > 0.05;
   const ballPersistentlyOut = (game.outOfBoundsTimer ?? 0) > 0.08;
-  if (ballOutsideField && (ballClearlyOut || ballPersistentlyOut)) {
+  const overbarMissPending = (game.overGoalNetTeam ?? 0) !== 0
+    && Math.sign(game.ball.position.z || 0) === Math.sign(game.overGoalNetTeam || 0)
+    && Math.abs(game.ball.position.x) < FOOTBALL_GOAL_WIDTH * 0.5 + 1.2;
+  const ballRecoverableForRestart = !overbarMissPending
+    || game.ball.position.y <= FOOTBALL_BALL_RADIUS + 0.16
+    || ((game.outOfBoundsTimer ?? 0) > 0.42 && game.ballVel.y <= 0.12);
+  if (ballOutsideField && (ballClearlyOut || ballPersistentlyOut) && ballRecoverableForRestart) {
     startFootballRefRestart(game, game.ball.position.x, game.ball.position.z);
   }
 }

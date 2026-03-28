@@ -99,7 +99,7 @@ export function prepareFootballPlayerFrameRuntime(context) {
 
   p.attackLane = "hold";
   p.kickCooldown = Math.max(0, p.kickCooldown - dt);
-  p.kickBlend = Math.max(0, (p.kickBlend ?? 0) - dt * 6.4);
+  p.kickBlend = Math.max(0, (p.kickBlend ?? 0) - dt * 4.8);
   p.bangerCooldown = Math.max(0, (p.bangerCooldown ?? 0) - dt);
   p.burstTimer = Math.max(0, (p.burstTimer ?? 0) - dt);
   p.burstCooldown = Math.max(0, (p.burstCooldown ?? 0) - dt);

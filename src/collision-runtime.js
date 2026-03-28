@@ -9,18 +9,48 @@ import {
   TRACK_PERSON_RADIUS
 } from "./game-config.js";
 
-const COLLISION_IGNORE_GOAL_OPTIONS = { ignoreGoalColliders: true };
 const COLLISION_SCRATCH_RESULT = { x: 0, z: 0 };
 const COLLISION_SCRATCH_CLAMP = { x: 0, z: 0 };
 const COLLISION_PEOPLE_POOL = [];
 
-function isInsideFootballGoalPocket(x, z) {
+function getFootballGoalInteriorState(x, z) {
+  const side = Math.sign(z || 0);
+  if (side === 0) return null;
+
   const goalLine = FOOTBALL_FIELD_HALF_LENGTH - 0.9;
-  const goalDepthLimit = goalLine + FOOTBALL_GOAL_DEPTH + 0.24;
-  const goalMouthHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 + 0.36;
-  return Math.abs(z) > goalLine - 0.06
-    && Math.abs(z) < goalDepthLimit
-    && Math.abs(x) < goalMouthHalfWidth;
+  const goalTraverseFrontDepth = goalLine - (JUKU_COLLIDER_RADIUS + 0.2);
+  const goalDepthLimit = goalLine + FOOTBALL_GOAL_DEPTH - 0.38;
+  const goalMouthHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 - JUKU_COLLIDER_RADIUS - 0.04;
+  const depth = z * side;
+  if (depth < goalTraverseFrontDepth || depth > goalDepthLimit || Math.abs(x) > goalMouthHalfWidth + 0.08) {
+    return null;
+  }
+
+  return { side, depth };
+}
+
+export function canTraverseFootballGoalPocket(prevX, prevZ, nextX, nextZ) {
+  const goalLine = FOOTBALL_FIELD_HALF_LENGTH - 0.9;
+  const goalTraverseFrontDepth = goalLine - (JUKU_COLLIDER_RADIUS + 0.2);
+  const goalMouthHalfWidth = FOOTBALL_GOAL_WIDTH * 0.5 - JUKU_COLLIDER_RADIUS - 0.04;
+  const previous = getFootballGoalInteriorState(prevX, prevZ);
+  const next = getFootballGoalInteriorState(nextX, nextZ);
+
+  if (previous) {
+    return true;
+  }
+  if (!next) {
+    return false;
+  }
+
+  const prevSide = Math.sign(prevZ || nextZ || 0) || next.side;
+  if (prevSide !== next.side) {
+    return false;
+  }
+
+  const prevDepth = prevZ * next.side;
+  return prevDepth <= goalTraverseFrontDepth + 0.08
+    && Math.abs(prevX) <= goalMouthHalfWidth + 0.08;
 }
 
 function getCollisionPersonSlot(index) {
@@ -60,24 +90,51 @@ function getPeoplePairCollisionResponse(a, b) {
 function canApplyLooseBallHumanContact(game) {
   return Boolean(game?.ball)
     && !game.ballHolder
-    && !game.goalPending
-    && !game.celebration?.active
-    && !game.refRestart?.active
-    && (game.restartHoldTimer ?? 0) <= 0.001
-    && (game.kickoffScriptTimer ?? 0) <= 0.001
-    && (game.kickoffReleaseTimer ?? 0) <= 0.001
     && game.ball.position.y <= FOOTBALL_BALL_RADIUS + 0.58;
 }
 
 function canEnforceGroundBallBodySeparation(game) {
   return Boolean(game?.ball)
-    && !game.celebration?.active
     && game.ball.position.y <= FOOTBALL_BALL_RADIUS + 0.58;
+}
+
+function moveLooseBallWithColliders(game, moveX, moveZ) {
+  const totalDist = Math.hypot(moveX, moveZ);
+  if (totalDist <= 0.0001) return false;
+
+  const stepSize = Math.max(0.06, FOOTBALL_BALL_RADIUS * 0.4);
+  const steps = Math.max(1, Math.ceil(totalDist / stepSize));
+  let blocked = false;
+  let currentX = game.ball.position.x;
+  let currentZ = game.ball.position.z;
+
+  for (let i = 0; i < steps; i += 1) {
+    const nextX = currentX + moveX / steps;
+    const nextZ = currentZ + moveZ / steps;
+    const resolved = resolveCircularCollisionsIntoRuntime(
+      COLLISION_SCRATCH_RESULT,
+      nextX,
+      nextZ,
+      FOOTBALL_BALL_RADIUS,
+      game.colliders ?? []
+    );
+    if (Math.hypot(resolved.x - nextX, resolved.z - nextZ) > 0.0005) {
+      blocked = true;
+    }
+    currentX = resolved.x;
+    currentZ = resolved.z;
+  }
+
+  game.ball.position.x = currentX;
+  game.ball.position.z = currentZ;
+  return blocked;
 }
 
 function personHasBallOverlapPrivilege(game, person) {
   if (person.kind === "coach") {
-    return Boolean(game.refRestart?.active) && game.refRestart.phase !== "clear";
+    return Boolean(game.refRestart?.active)
+      && game.refRestart.phase !== "clear"
+      && game.refRestart.phase !== "toBall";
   }
   if (person.kind !== "football" || !person.ref) return false;
 
@@ -110,8 +167,7 @@ function applyLooseBallContactForPerson(game, person, dt, constrainPerson) {
   const overlap = minDist - dist;
   const ballShove = Math.max(0.04, overlap * 0.88);
 
-  game.ball.position.x += nx * ballShove;
-  game.ball.position.z += nz * ballShove;
+  const ballBlocked = moveLooseBallWithColliders(game, nx * ballShove, nz * ballShove);
   person.x = game.ball.position.x - nx * minDist;
   person.z = game.ball.position.z - nz * minDist;
   constrainPerson(person);
@@ -126,6 +182,10 @@ function applyLooseBallContactForPerson(game, person, dt, constrainPerson) {
     const scale = maxPlanarSpeed / planarSpeed;
     game.ballVel.x *= scale;
     game.ballVel.z *= scale;
+  }
+  if (ballBlocked) {
+    game.ballVel.x *= 0.72;
+    game.ballVel.z *= 0.72;
   }
   game.ballVel.y = Math.min(game.ballVel.y, 0.12);
   if (game.ball.position.y < FOOTBALL_BALL_RADIUS) {
@@ -151,7 +211,7 @@ function applyGroundBallSeparationForPerson(game, person, constrainPerson) {
   return true;
 }
 
-function resolveJukuCollisionsIntoRuntime(result, nextX, nextZ, colliders, options = {}) {
+function resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, radius, colliders, options = {}) {
   result.x = nextX;
   result.z = nextZ;
   if (!colliders || colliders.length === 0) return result;
@@ -162,10 +222,10 @@ function resolveJukuCollisionsIntoRuntime(result, nextX, nextZ, colliders, optio
 
     for (let i = 0; i < colliders.length; i += 1) {
       const collider = colliders[i];
-      if (ignoreGoalColliders && collider.role === "goal") continue;
+      if (ignoreGoalColliders && typeof collider.role === "string" && collider.role.startsWith("goal")) continue;
 
       if (collider.type === "circle") {
-        const minDist = collider.r + JUKU_COLLIDER_RADIUS;
+        const minDist = collider.r + radius;
         const dx = result.x - collider.x;
         const dz = result.z - collider.z;
         const distSq = dx * dx + dz * dz;
@@ -186,8 +246,8 @@ function resolveJukuCollisionsIntoRuntime(result, nextX, nextZ, colliders, optio
       const relZ = result.z - collider.z;
       let localX = relX * cos + relZ * sin;
       let localZ = -relX * sin + relZ * cos;
-      const halfX = collider.halfX + JUKU_COLLIDER_RADIUS;
-      const halfZ = collider.halfZ + JUKU_COLLIDER_RADIUS;
+      const halfX = collider.halfX + radius;
+      const halfZ = collider.halfZ + radius;
 
       if (Math.abs(localX) <= halfX && Math.abs(localZ) <= halfZ) {
         const penX = halfX - Math.abs(localX);
@@ -207,6 +267,10 @@ function resolveJukuCollisionsIntoRuntime(result, nextX, nextZ, colliders, optio
   }
 
   return result;
+}
+
+function resolveJukuCollisionsIntoRuntime(result, nextX, nextZ, colliders, options = {}) {
+  return resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, JUKU_COLLIDER_RADIUS, colliders, options);
 }
 
 export function resolveJukuCollisionsRuntime(nextX, nextZ, colliders, options = {}) {
@@ -286,6 +350,15 @@ export function resolvePeopleCollisionsRuntime(
   const constrainPerson = (person) => {
     if (person.kind === "football") {
       clampFootball(person);
+      const resolved = resolveCircularCollisionsIntoRuntime(
+        COLLISION_SCRATCH_RESULT,
+        person.x,
+        person.z,
+        person.radius,
+        colliders
+      );
+      person.x = resolved.x;
+      person.z = resolved.z;
       return;
     }
     if (person.kind === "track") {
@@ -298,30 +371,31 @@ export function resolvePeopleCollisionsRuntime(
       const clamped = clampFootballRefereePosition(person.x, person.z, COLLISION_SCRATCH_CLAMP);
       person.x = clamped.x;
       person.z = clamped.z;
-      const coachCanTraverseGoal = Boolean(game.refRestart?.active) && (
-        isInsideFootballGoalPocket(person.x, person.z)
-        || isInsideFootballGoalPocket(game.coach?.runner.root.position.x ?? 0, game.coach?.runner.root.position.z ?? 0)
-        || isInsideFootballGoalPocket(game.refRestart?.ballX ?? 0, game.refRestart?.ballZ ?? 0)
-      );
-      const resolved = resolveJukuCollisionsIntoRuntime(
+      const resolved = resolveCircularCollisionsIntoRuntime(
         COLLISION_SCRATCH_RESULT,
         person.x,
         person.z,
-        colliders,
-        coachCanTraverseGoal ? COLLISION_IGNORE_GOAL_OPTIONS : undefined
+        person.radius,
+        colliders
       );
       person.x = resolved.x;
       person.z = resolved.z;
       return;
     }
-    const resolved = resolveJukuCollisionsIntoRuntime(
+    const resolved = resolveCircularCollisionsIntoRuntime(
       COLLISION_SCRATCH_RESULT,
       person.x,
       person.z,
-      colliders,
-      COLLISION_IGNORE_GOAL_OPTIONS
+      person.radius,
+      colliders
     );
-    const clamped = clampGoalInteriorPosition(resolved.x, resolved.z, COLLISION_SCRATCH_CLAMP);
+    const clamped = clampGoalInteriorPosition(
+      resolved.x,
+      resolved.z,
+      COLLISION_SCRATCH_CLAMP,
+      person.prevX,
+      person.prevZ
+    );
     person.x = clamped.x;
     person.z = clamped.z;
   };
@@ -333,14 +407,6 @@ export function resolvePeopleCollisionsRuntime(
       const a = people[i];
       for (let j = i + 1; j < peopleCount; j += 1) {
         const b = people[j];
-        if (
-          game.refRestart?.active
-          && (a.kind === "coach" || b.kind === "coach")
-          && a.kind !== "juku"
-          && b.kind !== "juku"
-        ) {
-          continue;
-        }
         const dx = b.x - a.x;
         const dz = b.z - a.z;
         const response = getPeoplePairCollisionResponse(a, b);

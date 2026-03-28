@@ -21,7 +21,7 @@ export {
   MeshStandardMaterial,
   Object3D,
   Path,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
   RepeatWrapping,

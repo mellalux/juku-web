@@ -21,12 +21,20 @@ export function createUi() {
   pipFrame.style.position = "fixed";
   pipFrame.style.pointerEvents = "none";
   pipFrame.style.display = "none";
-  pipFrame.style.zIndex = "12";
+  pipFrame.style.zIndex = "14";
   pipFrame.style.border = "2px solid rgba(255,255,255,0.92)";
   pipFrame.style.borderRadius = "14px";
   pipFrame.style.boxShadow = "0 14px 30px rgba(15,23,42,0.28)";
   pipFrame.style.overflow = "hidden";
   pipFrame.style.background = "transparent";
+  const pipCanvas = document.createElement("canvas");
+  pipCanvas.style.position = "absolute";
+  pipCanvas.style.inset = "0";
+  pipCanvas.style.width = "100%";
+  pipCanvas.style.height = "100%";
+  pipCanvas.style.display = "block";
+  pipCanvas.style.pointerEvents = "none";
+  pipFrame.appendChild(pipCanvas);
   document.body.appendChild(pipFrame);
 
   const goalOverlay = document.createElement("div");
@@ -82,12 +90,21 @@ export function createUi() {
   replayCard.style.background = "rgba(15,23,42,0.08)";
   replayCard.style.border = "2px solid rgba(255,255,255,0.96)";
   replayCard.style.boxShadow = "0 22px 60px rgba(15,23,42,0.4), 0 0 0 1px rgba(255,255,255,0.18) inset";
+  const replayCanvas = document.createElement("canvas");
+  replayCanvas.style.position = "absolute";
+  replayCanvas.style.inset = "0";
+  replayCanvas.style.width = "100%";
+  replayCanvas.style.height = "100%";
+  replayCanvas.style.display = "block";
+  replayCanvas.style.pointerEvents = "none";
+  replayCard.appendChild(replayCanvas);
 
   const replayBadge = document.createElement("div");
   replayBadge.textContent = "SLOW MO REPLAY";
   replayBadge.style.position = "absolute";
   replayBadge.style.left = "18px";
   replayBadge.style.top = "18px";
+  replayBadge.style.zIndex = "1";
   replayBadge.style.padding = "8px 12px";
   replayBadge.style.borderRadius = "999px";
   replayBadge.style.background = "rgba(15,23,42,0.78)";
@@ -103,6 +120,7 @@ export function createUi() {
   replayFlash.style.position = "absolute";
   replayFlash.style.left = "50%";
   replayFlash.style.top = "50%";
+  replayFlash.style.zIndex = "1";
   replayFlash.style.transform = "translate(-50%, -50%) scale(0.88)";
   replayFlash.style.padding = "16px 24px";
   replayFlash.style.borderRadius = "999px";
@@ -157,9 +175,11 @@ export function createUi() {
     goalOverlay,
     goalOverlayScorer,
     goalOverlayTitle,
+    pipCanvas,
     pipFrame,
     playerStatus,
     replayBadge,
+    replayCanvas,
     replayCard,
     replayFlash,
     scoreStatus,

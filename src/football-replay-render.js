@@ -21,12 +21,20 @@ const REPLAY_SAVED_BALL = {
 };
 
 const REPLAY_SAVED_PLAYERS = [];
+let replayViewportWidth = 0;
+let replayViewportHeight = 0;
+let replayViewportPixelRatio = 0;
+
+function syncReplayRendererSize(renderer, width, height) {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(width, height, false);
+}
 
 export function renderGoalReplay3DView({
   state,
   game,
   pipCamera,
-  renderer,
+  replayRenderer,
   replayBadge,
   replayCard,
   scene
@@ -42,12 +50,19 @@ export function renderGoalReplay3DView({
   if (!frame) return;
 
   const rect = replayCard.getBoundingClientRect();
-  const width = Math.max(1, window.innerWidth);
-  const height = Math.max(1, window.innerHeight);
   const replayWidth = Math.max(260, Math.round(rect.width));
   const replayHeight = Math.max(146, Math.round(rect.height));
-  const replayX = Math.round(rect.left);
-  const replayY = Math.round(height - rect.bottom);
+  const pixelRatio = Math.min(window.devicePixelRatio, 2);
+  if (
+    replayViewportWidth !== replayWidth
+    || replayViewportHeight !== replayHeight
+    || replayViewportPixelRatio !== pixelRatio
+  ) {
+    replayViewportWidth = replayWidth;
+    replayViewportHeight = replayHeight;
+    replayViewportPixelRatio = pixelRatio;
+    syncReplayRendererSize(replayRenderer, replayWidth, replayHeight);
+  }
   REPLAY_SAVED_BALL.visible = game.ball.visible;
   REPLAY_SAVED_BALL.x = game.ball.position.x;
   REPLAY_SAVED_BALL.y = game.ball.position.y;
@@ -88,13 +103,7 @@ export function renderGoalReplay3DView({
   pipCamera.updateProjectionMatrix();
   pipCamera.position.set(setup.x, setup.y, setup.z);
   pipCamera.lookAt(setup.lookX, setup.lookY, setup.lookZ);
-  renderer.clearDepth();
-  renderer.setScissorTest(true);
-  renderer.setViewport(replayX, replayY, replayWidth, replayHeight);
-  renderer.setScissor(replayX, replayY, replayWidth, replayHeight);
-  renderer.render(scene, pipCamera);
-  renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, width, height);
+  replayRenderer.render(scene, pipCamera);
 
   game.ball.visible = REPLAY_SAVED_BALL.visible;
   game.ball.position.set(REPLAY_SAVED_BALL.x, REPLAY_SAVED_BALL.y, REPLAY_SAVED_BALL.z);

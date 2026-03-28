@@ -79,8 +79,9 @@ const FOOTBALL_GOAL_SIDE_NET_MATERIAL = new THREE.MeshStandardMaterial({
 const FOOTBALL_HURDLE_LEFT_OFFSET = new THREE.Vector3(-0.31, 0.17, 0);
 const FOOTBALL_HURDLE_RIGHT_OFFSET = new THREE.Vector3(0.31, 0.17, 0);
 const FOOTBALL_HURDLE_BAR_OFFSET = new THREE.Vector3(0, 0.335, 0);
-const FOOTBALL_GOAL_CENTER_LOCAL = new THREE.Vector3(0, 0, FOOTBALL_GOAL_DEPTH * 0.5);
-const FOOTBALL_GOAL_CENTER_WORLD = new THREE.Vector3();
+const FOOTBALL_GOAL_COLLIDER_WORLD = new THREE.Vector3();
+const FOOTBALL_GOAL_POST_COLLIDER_RADIUS = 0.11;
+const FOOTBALL_GOAL_NET_COLLIDER_THICKNESS = 0.08;
 const FOOTBALL_GOAL_POST_TRANSFORMS = [
   { position: new THREE.Vector3(-FOOTBALL_GOAL_HALF_WIDTH, FOOTBALL_GOAL_HEIGHT * 0.5, 0) },
   { position: new THREE.Vector3(FOOTBALL_GOAL_HALF_WIDTH, FOOTBALL_GOAL_HEIGHT * 0.5, 0) },
@@ -111,6 +112,29 @@ const FOOTBALL_GOAL_SIDE_NET_TRANSFORMS = [
     rotation: new THREE.Euler(0, -Math.PI / 2, 0)
   }
 ];
+const FOOTBALL_GOAL_POST_COLLIDER_POINTS = [
+  new THREE.Vector3(-FOOTBALL_GOAL_HALF_WIDTH, 0, 0),
+  new THREE.Vector3(FOOTBALL_GOAL_HALF_WIDTH, 0, 0),
+  new THREE.Vector3(-FOOTBALL_GOAL_HALF_WIDTH, 0, FOOTBALL_GOAL_DEPTH),
+  new THREE.Vector3(FOOTBALL_GOAL_HALF_WIDTH, 0, FOOTBALL_GOAL_DEPTH)
+];
+const FOOTBALL_GOAL_BACK_NET_COLLIDER = {
+  position: new THREE.Vector3(0, 0, FOOTBALL_GOAL_DEPTH),
+  halfX: FOOTBALL_GOAL_HALF_WIDTH - FOOTBALL_GOAL_NET_COLLIDER_THICKNESS,
+  halfZ: FOOTBALL_GOAL_NET_COLLIDER_THICKNESS
+};
+const FOOTBALL_GOAL_SIDE_NET_COLLIDERS = [
+  {
+    position: new THREE.Vector3(-FOOTBALL_GOAL_HALF_WIDTH, 0, FOOTBALL_GOAL_DEPTH * 0.5),
+    halfX: FOOTBALL_GOAL_NET_COLLIDER_THICKNESS,
+    halfZ: FOOTBALL_GOAL_DEPTH * 0.5 - FOOTBALL_GOAL_NET_COLLIDER_THICKNESS
+  },
+  {
+    position: new THREE.Vector3(FOOTBALL_GOAL_HALF_WIDTH, 0, FOOTBALL_GOAL_DEPTH * 0.5),
+    halfX: FOOTBALL_GOAL_NET_COLLIDER_THICKNESS,
+    halfZ: FOOTBALL_GOAL_DEPTH * 0.5 - FOOTBALL_GOAL_NET_COLLIDER_THICKNESS
+  }
+];
 
 function pushAnchoredFootballInstances(target, anchorMatrix, transforms) {
   for (let i = 0; i < transforms.length; i += 1) {
@@ -119,6 +143,44 @@ function pushAnchoredFootballInstances(target, anchorMatrix, transforms) {
       anchorMatrix,
       position: transform.position,
       rotation: transform.rotation
+    });
+  }
+}
+
+function pushGoalPhysicalColliders(colliders, goal) {
+  for (let i = 0; i < FOOTBALL_GOAL_POST_COLLIDER_POINTS.length; i += 1) {
+    const world = goal.localToWorld(FOOTBALL_GOAL_COLLIDER_WORLD.copy(FOOTBALL_GOAL_POST_COLLIDER_POINTS[i]));
+    colliders.push({
+      type: "circle",
+      role: "goalFrame",
+      x: world.x,
+      z: world.z,
+      r: FOOTBALL_GOAL_POST_COLLIDER_RADIUS
+    });
+  }
+
+  const backNetWorld = goal.localToWorld(FOOTBALL_GOAL_COLLIDER_WORLD.copy(FOOTBALL_GOAL_BACK_NET_COLLIDER.position));
+  colliders.push({
+    type: "obb",
+    role: "goalNet",
+    x: backNetWorld.x,
+    z: backNetWorld.z,
+    halfX: FOOTBALL_GOAL_BACK_NET_COLLIDER.halfX,
+    halfZ: FOOTBALL_GOAL_BACK_NET_COLLIDER.halfZ,
+    yaw: goal.rotation.y
+  });
+
+  for (let i = 0; i < FOOTBALL_GOAL_SIDE_NET_COLLIDERS.length; i += 1) {
+    const sideNet = FOOTBALL_GOAL_SIDE_NET_COLLIDERS[i];
+    const world = goal.localToWorld(FOOTBALL_GOAL_COLLIDER_WORLD.copy(sideNet.position));
+    colliders.push({
+      type: "obb",
+      role: "goalNet",
+      x: world.x,
+      z: world.z,
+      halfX: sideNet.halfX,
+      halfZ: sideNet.halfZ,
+      yaw: goal.rotation.y
     });
   }
 }
@@ -170,16 +232,7 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
     });
     pushAnchoredFootballInstances(goalSideNetInstances, anchorMatrix, FOOTBALL_GOAL_SIDE_NET_TRANSFORMS);
 
-    const goalCenter = goal.localToWorld(FOOTBALL_GOAL_CENTER_WORLD.copy(FOOTBALL_GOAL_CENTER_LOCAL));
-    colliders.push({
-      type: "obb",
-      role: "goal",
-      x: goalCenter.x,
-      z: goalCenter.z,
-      halfX: FOOTBALL_GOAL_WIDTH * 0.5 + 0.18,
-      halfZ: FOOTBALL_GOAL_DEPTH * 0.5 + 0.18,
-      yaw: goal.rotation.y
-    });
+    pushGoalPhysicalColliders(colliders, goal);
     goals.push(goal);
   });
 
@@ -267,6 +320,7 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
     vz: 0,
     targetX: 0,
     targetZ: -3.4,
+    routeWaypoint: null,
     sidelineOffset: FOOTBALL_FIELD_HALF_WIDTH + 1.15,
     perimeterOffset: 1.15,
     perimeterT: getFootballPerimeterTFromPoint(FOOTBALL_FIELD_HALF_WIDTH + 1.15, -3.4, 1.15),
@@ -429,6 +483,7 @@ export function buildFootballGame(teamData = DEFAULT_FOOTBALL_TEAM_DATA) {
       commitForwardTimer: 0,
       commitTargetX: homeX,
       commitTargetZ: homeZ,
+      routeWaypoint: null,
       shapeTargetX: homeX,
       shapeTargetZ: homeZ,
       nextShuffle: 0.55 + Math.random() * 1.25

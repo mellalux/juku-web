@@ -1,8 +1,10 @@
 import * as THREE from "./three.js";
+import { getFootballRouteTargetRuntime } from "./football-routing-runtime.js";
 import {
   ATHLETE_BALL_REACH,
   ARCADE_KEEPER_NERF,
   ARCADE_SCORING_BOOST,
+  COACH_PERSON_RADIUS,
   FOOTBALL_BALL_CONTROL_HEIGHT,
   FOOTBALL_BALL_GRAVITY,
   FOOTBALL_BALL_GROUND_BOUNCE,
@@ -35,6 +37,49 @@ import {
   TRACK_RUNNER_PASS_FRONT_CLEARANCE,
   TRACK_RUNNER_PASS_TRIGGER
 } from "./game-config.js";
+
+function getDistanceToSegment(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const lenSq = dx * dx + dz * dz;
+  const t = lenSq > 0.000001
+    ? THREE.MathUtils.clamp(((px - ax) * dx + (pz - az) * dz) / lenSq, 0, 1)
+    : 0;
+  const closestX = ax + dx * t;
+  const closestZ = az + dz * t;
+  return Math.hypot(px - closestX, pz - closestZ);
+}
+
+function collectFootballPlayerRouteBlockers(game, player, targetX, targetZ) {
+  const currentX = player.runner.root.position.x;
+  const currentZ = player.runner.root.position.z;
+  const blockers = [];
+
+  for (let i = 0; i < game.players.length; i += 1) {
+    const other = game.players[i];
+    if (other === player) continue;
+    const otherX = other.runner.root.position.x;
+    const otherZ = other.runner.root.position.z;
+    const distToCurrent = Math.hypot(otherX - currentX, otherZ - currentZ);
+    const distToTarget = Math.hypot(otherX - targetX, otherZ - targetZ);
+    const laneDist = getDistanceToSegment(otherX, otherZ, currentX, currentZ, targetX, targetZ);
+    if (distToCurrent > 6.2 && distToTarget > 4.8 && laneDist > 2.1) continue;
+    blockers.push({ x: otherX, z: otherZ, r: FOOTBALL_PERSON_RADIUS * 0.92 });
+  }
+
+  if (game.coach) {
+    const coachX = game.coach.runner.root.position.x;
+    const coachZ = game.coach.runner.root.position.z;
+    const distToCurrent = Math.hypot(coachX - currentX, coachZ - currentZ);
+    const distToTarget = Math.hypot(coachX - targetX, coachZ - targetZ);
+    const laneDist = getDistanceToSegment(coachX, coachZ, currentX, currentZ, targetX, targetZ);
+    if (distToCurrent <= 6.6 || distToTarget <= 5 || laneDist <= 2.25) {
+      blockers.push({ x: coachX, z: coachZ, r: COACH_PERSON_RADIUS * 0.88 });
+    }
+  }
+
+  return blockers;
+}
 
 export function updateFootballPlayerMovementRuntime(context) {
   const {
@@ -73,6 +118,20 @@ export function updateFootballPlayerMovementRuntime(context) {
   p.shapeTargetZ = THREE.MathUtils.damp(p.shapeTargetZ, currentTargetZ, shapeResponse, dt);
   currentTargetX = p.shapeTargetX;
   currentTargetZ = p.shapeTargetZ;
+  const routedTarget = getFootballRouteTargetRuntime(
+    game,
+    p,
+    p.runner.root.position.x,
+    p.runner.root.position.z,
+    currentTargetX,
+    currentTargetZ,
+    {
+      radius: FOOTBALL_PERSON_RADIUS,
+      dynamicBlockers: collectFootballPlayerRouteBlockers(game, p, currentTargetX, currentTargetZ)
+    }
+  );
+  currentTargetX = routedTarget.x;
+  currentTargetZ = routedTarget.z;
 
   const dirX = currentTargetX - p.runner.root.position.x;
   const dirZ = currentTargetZ - p.runner.root.position.z;

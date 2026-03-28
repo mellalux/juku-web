@@ -11,10 +11,9 @@
     "deploy:package": "node ./scripts/package-deploy.mjs"
   },
   "dependencies": {
-    "three": "^0.180.0"
+    "three": "0.183.2"
   },
   "devDependencies": {
-    "vite": "^7.1.5"
+    "vite": "8.0.3"
   }
 }
-

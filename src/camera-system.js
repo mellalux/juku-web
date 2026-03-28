@@ -42,6 +42,7 @@ const FOOTBALL_PIP_LAYOUT = {
   display: "none",
   height: 0,
   left: 0,
+  pixelRatio: 0,
   top: 0,
   width: 0
 };
@@ -50,6 +51,11 @@ const FOOTBALL_BROADCAST_NEARBY_PLAYERS = Array.from(
   { length: FOOTBALL_BROADCAST_CAMERA_LIMIT },
   () => ({ p: null, dist: Infinity })
 );
+
+function syncOverlayRendererSize(renderer, width, height) {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(width, height, false);
+}
 
 function getFootballBroadcastPointSlot(index) {
   if (!FOOTBALL_BROADCAST_POINT_POOL[index]) {
@@ -567,7 +573,7 @@ export function updateCameraSystem({ dt, state, camera, cameraRig, footballGame,
   }
 }
 
-export function renderCamera3PipView({ state, pipFrame, pipCamera, camera, renderer, scene }) {
+export function renderCamera3PipView({ state, pipFrame, pipCamera, camera, pipRenderer, scene }) {
   if (state.activeCam !== 3) {
     if (FOOTBALL_PIP_LAYOUT.display !== "none") {
       FOOTBALL_PIP_LAYOUT.display = "none";
@@ -591,6 +597,7 @@ export function renderCamera3PipView({ state, pipFrame, pipCamera, camera, rende
   const pipX = width - pipWidth - margin;
   const pipY = height - pipHeight - margin;
   const pipTop = height - pipY - pipHeight;
+  const pixelRatio = Math.min(window.devicePixelRatio, 2);
   if (FOOTBALL_PIP_LAYOUT.display !== "block") {
     FOOTBALL_PIP_LAYOUT.display = "block";
     pipFrame.style.display = "block";
@@ -606,22 +613,26 @@ export function renderCamera3PipView({ state, pipFrame, pipCamera, camera, rende
   if (FOOTBALL_PIP_LAYOUT.width !== pipWidth) {
     FOOTBALL_PIP_LAYOUT.width = pipWidth;
     pipFrame.style.width = `${pipWidth}px`;
+    syncOverlayRendererSize(pipRenderer, pipWidth, pipHeight);
   }
   if (FOOTBALL_PIP_LAYOUT.height !== pipHeight) {
     FOOTBALL_PIP_LAYOUT.height = pipHeight;
     pipFrame.style.height = `${pipHeight}px`;
+    syncOverlayRendererSize(pipRenderer, pipWidth, pipHeight);
+  }
+  if (
+    FOOTBALL_PIP_LAYOUT.pixelRatio !== pixelRatio
+    || FOOTBALL_PIP_LAYOUT.width === 0
+    || FOOTBALL_PIP_LAYOUT.height === 0
+  ) {
+    FOOTBALL_PIP_LAYOUT.pixelRatio = pixelRatio;
+    syncOverlayRendererSize(pipRenderer, pipWidth, pipHeight);
   }
   pipCamera.fov = camera.fov;
   pipCamera.aspect = pipWidth / Math.max(1, pipHeight);
   pipCamera.updateProjectionMatrix();
   pipCamera.position.set(standbySetup.x, standbySetup.y, standbySetup.z);
   pipCamera.lookAt(standbySetup.lookX, standbySetup.lookY, standbySetup.lookZ);
-  renderer.clearDepth();
-  renderer.setScissorTest(true);
-  renderer.setViewport(pipX, pipY, pipWidth, pipHeight);
-  renderer.setScissor(pipX, pipY, pipWidth, pipHeight);
-  renderer.render(scene, pipCamera);
-  renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, width, height);
+  pipRenderer.render(scene, pipCamera);
 }
 
