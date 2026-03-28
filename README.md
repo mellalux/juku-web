@@ -2,38 +2,48 @@
 
 ![Juku](public/images/Juku.png)
 
-A playful WebGL sports game built with `three` and `vite`.
+Juku's World is a browser-based WebGL sports playground built with `three` and `vite`. You control Juku inside a small stadium world with a live football match, a running track, multiple camera modes, expressive face controls, goal overlays, replay rendering, and installable PWA support.
 
-The project runs as a browser game with touch controls, mobile-friendly UI, and Progressive Web App support. It is set up to be deployed at `https://juku.mella.ee/`.
+The app is currently configured for deployment at `https://juku.mella.ee/`.
 
-## Features
+## Highlights
 
-- WebGL scene powered by `three`
-- Football match logic, running track elements, and character animation
-- Mobile touch controls and locked viewport zoom
-- Installable PWA with manifest, icons, versioned service worker cache, and offline precache
-- Social sharing metadata for Open Graph and Twitter
+- Real-time 3D scene rendered with `three`
+- Playable Juku character with movement, jumping, facial-expression controls, and a pick-up/drop sword interaction
+- Autonomous football simulation with team presentation, AI-driven player behavior, scoreboard updates, goal celebration overlays, and slow-motion replay
+- Running track environment with race timing, runners, and hurdle gameplay logic
+- Multiple camera modes, zoom controls, and picture-in-picture / replay views
+- Touch-first mobile UI alongside keyboard controls
+- Progressive Web App setup with manifest, icons, offline precache, and versioned service worker cache
+
+## Gameplay Snapshot
+
+- You directly control Juku, while the football match simulation runs on its own in the stadium
+- Each session builds one live `6v6` football match from the configured team pool
+- Two teams are chosen at random from the available world data and assigned to the red and blue scoreboard slots
+- The stadium also includes an `8`-lane running track, `8` runners, a track timer, and hurdle systems
+- Goal scoring triggers a presentation flow with scoreboard updates, a large goal overlay, and a replay card
 
 ## Tech Stack
 
 - `Vite`
 - `Three.js`
-- Plain HTML, CSS, and JavaScript
+- Plain HTML, CSS, and JavaScript modules
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ recommended
-- npm
+- A current Node.js LTS release
+- `npm`
 
-### Install
+### Install dependencies
 
 ```bash
 npm install
 ```
 
-### Run the dev server
+### Start the dev server
 
 ```bash
 npm run dev
@@ -51,6 +61,67 @@ npm run build
 npm run preview
 ```
 
+## Available Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Starts the Vite development server. |
+| `npm run pwa:sync` | Regenerates `public/sw.js` and `public/version.json` from the current `package.json` version. |
+| `npm run build` | Runs the PWA sync step, builds the app with Vite, then rewrites `dist/sw.js` with the final hashed asset list. |
+| `npm run preview` | Serves the production build locally. |
+| `npm run deploy:package` | Copies `dist/` into `release/juku-web-v<version>/` and writes `deploy-info.json` for deployment handoff. |
+
+## Controls
+
+### Keyboard
+
+| Input | Action |
+| --- | --- |
+| `Arrow Up` / `Arrow Down` | Move forward / backward |
+| `Arrow Left` / `Arrow Right` | Turn Juku |
+| `Enter` | Jump |
+| `E` | Drop or pick up the sword |
+| `1` `2` `3` `4` | Switch camera mode (`FREE`, `JUKU FOLLOW`, `TV 2IN1`, `TOP DOWN`) |
+| `+` / `-` or mouse wheel | Zoom camera |
+| `Z` `X` `C` `B` `N` | Set face to calm, angry, surprised, happy, or sad |
+| `V` | Return face control to auto mode |
+| `F` | Pause / resume football simulation only |
+| `R` | Pause / resume track timer only |
+
+### Touch UI
+
+- Left joystick controls movement and turning
+- `JUMP` triggers jumping
+- `DROP` / `PICK UP` toggles the sword interaction
+- Camera buttons `1-4` switch views
+- Face buttons change expressions
+- `+` and `-` adjust zoom
+
+## Camera Modes
+
+| Key | Mode | Purpose |
+| --- | --- | --- |
+| `1` | `FREE` | General roaming camera around Juku |
+| `2` | `JUKU FOLLOW` | Closer follow camera focused on Juku |
+| `3` | `TV 2IN1` | Broadcast-style football framing with PiP support |
+| `4` | `TOP DOWN` | High overhead tactical view |
+
+## How the App Starts
+
+The startup path is intentionally split so the browser loads a tiny entry first and defers the heavier app bootstrap to the next animation frame.
+
+```text
+src/main.js
+  -> lazy imports src/app-bootstrap.js
+     -> loadWorldCharacterData()
+     -> createUi()
+     -> build scene, track, football game, and Juku
+     -> setupUiInputSystem()
+     -> createAppRuntime()
+     -> start animation loop
+     -> register service worker in production
+```
+
 ## Project Structure
 
 ```text
@@ -58,6 +129,8 @@ npm run preview
 |-- index.html
 |-- public/
 |   |-- app-icons/
+|   |-- data/
+|   |   `-- world-character-data.json
 |   |-- images/
 |   |-- manifest.webmanifest
 |   |-- sw.js
@@ -69,117 +142,75 @@ npm run preview
 |   |-- sw.template.js
 |   `-- sync-pwa-version.mjs
 |-- src/
-|   |-- main.js
 |   |-- app-bootstrap.js
 |   |-- app-runtime.js
 |   |-- football-*.js
 |   |-- juku-*.js
-|   |-- track-system.js
-|   |-- camera-system.js
 |   |-- ui*.js
-|   `-- style.css
+|   |-- world-*.js
+|   `-- main.js
+|-- vite.config.js
 `-- package.json
 ```
 
-## Architecture Notes
+## Key Files
 
-- `src/main.js` is now a lightweight entry that lazy-loads the heavy app bootstrap.
-- `src/app-bootstrap.js` builds the scene, UI, renderer, and runtime wiring.
-- Football logic is split across focused modules such as player runtime, match runtime, ball runtime, presentation, and AI helpers.
-- Shared geometry and materials are cached in dedicated helper modules to reduce repeated `three` allocations.
+- `src/main.js`: minimal browser entry that schedules the lazy bootstrap
+- `src/app-bootstrap.js`: builds the renderers, scene, UI, world objects, runtime wiring, and frame loop
+- `src/app-runtime.js`: coordinates camera and Juku updates each frame
+- `src/track-system.js`: track geometry, lane layout, finish line, and start block generation
+- `src/ui-input-system.js`: keyboard, mouse-wheel, and touch control wiring
+- `src/football-bridge.js`: connects match simulation, scoreboard, overlays, and replay hooks
+- `src/football-match-runtime.js`: top-level football orchestration
+- `src/football-player-runtime.js`: per-player football update coordinator
+- `src/camera-system.js`: free camera, follow camera, split/broadcast-style view, top-down view, and zoom handling
+- `src/world-character-data.js`: normalization, fallback data, and random team matchup selection
+- `public/data/world-character-data.json`: data-driven character, runner, referee, and football team definitions
 
-## Architecture Overview
+## Data-Driven Content
+
+The world setup is not hard-coded entirely in the runtime. `public/data/world-character-data.json` provides:
+
+- Juku's name, hair style, and colors
+- Referee presentation data
+- Track runner names and speed profiles
+- Football team identities, colors, and player rosters
+
+At startup, the app normalizes that JSON and randomly picks a red team and a blue team from the available team pool. If loading the JSON fails, the runtime falls back to embedded default data in `src/world-character-data.js`.
+
+If you want to tweak the cast, team branding, roster names, or the matchup pool itself, this JSON file is the first place to edit.
+
+## PWA and Versioning
+
+The app version lives in `package.json` under `"version"`. That version is reused across the PWA and deployment flow.
+
+During `npm run pwa:sync`:
+
+- `public/version.json` is regenerated
+- `public/sw.js` is rebuilt from `scripts/sw.template.js`
+- the cache name is updated with the current app version
+
+During `npm run build`:
+
+1. The public PWA assets are refreshed from the current version.
+2. Vite builds the app into `dist/`.
+3. `scripts/finalize-pwa-build.mjs` rewrites `dist/sw.js` so `PRECACHE_URLS` contains the actual built asset filenames, including hashed files in `dist/assets/`.
+
+When cached assets change, bumping the app version is the intended way to roll the service worker cache forward.
+
+## Deployment Notes
+
+`npm run deploy:package` prepares a release folder at:
 
 ```text
-src/main.js
-  -> lazy imports src/app-bootstrap.js
-     -> createUi() + setupUiInputSystem()
-     -> createAppRuntime()
-     -> createFootballBehaviorState()
-     -> createFootballBridge()
-        -> football-runtime.js
-           -> football-ball-runtime.js
-           -> football-match-runtime.js
-           -> football-player-runtime.js
-              -> football-player-state-runtime.js
-              -> football-player-targeting-runtime.js
-              -> football-player-movement-runtime.js
-              -> football-touch-runtime.js
-                 -> football-touch-decision-runtime.js
-                 -> football-touch-execution-runtime.js
+release/juku-web-v<version>/
 ```
 
-### Module Map
+That folder contains a copy of `dist/` plus a generated `deploy-info.json` summary.
 
-- `src/main.js`: tiny browser entry that starts the lazy bootstrap.
-- `src/app-bootstrap.js`: builds the renderer, scene, UI, world, and animation loop.
-- `src/app-runtime.js`: wires camera and Juku runtime updates into the main loop.
-- `src/football-bridge.js`: connects football runtime, scoreboard, replay, and overlay presentation.
-- `src/football-ball-runtime.js`: ball movement, collisions, goals, and possession transition setup.
-- `src/football-match-runtime.js`: top-level football gameplay orchestration.
-- `src/football-match-state-runtime.js`: match state timers, stall logic, out-of-bounds, and emergency clear flows.
-- `src/football-officials-track-runtime.js`: referee behavior, hurdles, and track runner updates.
-- `src/football-player-runtime.js`: per-player football update coordinator.
-- `src/football-player-state-runtime.js`: derived per-player state and frame prep.
-- `src/football-player-targeting-runtime.js`: kickoff, restart, open-play, and shape targets.
-- `src/football-player-movement-runtime.js`: movement, spacing, facing, and animation steering.
-- `src/football-touch-runtime.js`: touch orchestration for ball actions.
-- `src/football-touch-decision-runtime.js`: pass/cross/shot/clear decision logic.
-- `src/football-touch-execution-runtime.js`: pass/cross/shot/clear/dribble execution.
-- `src/juku-runtime.js`: Juku movement, pose, and face/equipment runtime.
-- `src/camera-system.js`: camera modes, PiP view, and football broadcast camera behavior.
-- `src/shared-geometry.js` and `src/shared-materials.js`: reusable `three` resources for lower allocation pressure.
+Typical deployment flow:
 
-## PWA Notes
-
-- The web app manifest lives at `public/manifest.webmanifest`.
-- The service worker is generated from `scripts/sw.template.js`.
-- `npm run build` performs the PWA flow in two stages:
-  - `scripts/sync-pwa-version.mjs` writes `public/sw.js` and `public/version.json` from the current `package.json` version.
-  - `scripts/finalize-pwa-build.mjs` rewrites `dist/sw.js` so `PRECACHE_URLS` includes the real built files, including hashed `assets/*.js` and `assets/*.css`.
-- The cache name is versioned, so bumping the app version is the intended way to roll PWA caches forward on deploy.
-- The generated production service worker intentionally excludes `sw.js` itself from the precache list.
-- PWA install and offline support should be tested on a real HTTPS deployment.
-
-## Versioning
-
-The app version is stored in [package.json](package.json) under `"version"`.
-
-You can bump it manually or via npm, for example:
-
-```bash
-npm version patch
-```
-
-That version is then used for:
-
-- `public/version.json`
-- the service worker cache name
-- the release folder name created by `npm run deploy:package`
-
-## Social Metadata
-
-The page metadata in `index.html` includes:
-
-- standard `description`
-- Open Graph tags for Facebook and other link preview consumers
-- Twitter card tags
-
-Current production URLs are configured for:
-
-- `https://juku.mella.ee/`
-- `https://juku.mella.ee/images/Juku.png`
-
-## Development Notes
-
-- The initial browser entry is `src/main.js`, but the main app startup happens in `src/app-bootstrap.js`.
-- Styling lives in `src/style.css`.
-- App icons are stored in `public/app-icons/`.
-- Open Graph preview art lives in `public/images/Juku.png`.
-
-## Deploy Checklist
-
-1. Bump the app version when cached PWA assets changed.
+1. Bump the version if cached assets changed.
 
 ```bash
 npm version patch
@@ -191,32 +222,32 @@ npm version patch
 npm run build
 ```
 
-3. Prepare a deployable release folder if needed.
+3. Prepare the release package if you want a versioned deploy folder.
 
 ```bash
 npm run deploy:package
 ```
 
-4. Publish the full contents of `dist/` or `release/juku-web-v<version>/`, including:
+4. Publish the contents of `dist/` or the generated release folder.
 
-- `index.html`
-- `manifest.webmanifest`
-- `sw.js`
-- `version.json`
-- `app-icons/`
-- `images/`
-- `assets/`
+For the current production setup, these URLs should resolve successfully after deploy:
 
-5. Verify these production URLs return `200 OK`:
-
+- `https://juku.mella.ee/`
 - `https://juku.mella.ee/manifest.webmanifest`
 - `https://juku.mella.ee/sw.js`
 - `https://juku.mella.ee/version.json`
 - `https://juku.mella.ee/app-icons/icon-192.png`
 - `https://juku.mella.ee/app-icons/icon-512.png`
 
-6. If testing an updated PWA, unregister the old service worker in DevTools and hard refresh.
+## Metadata and Hosting Assumptions
 
-## License
+- `index.html` includes Open Graph and Twitter card metadata for `https://juku.mella.ee/`
+- The current build assumes root hosting rather than a nested subpath
+- The production service worker is only registered in `import.meta.env.PROD`
 
-No license file is currently included in this repository.
+## Development Notes
+
+- `src/main.js` is intentionally tiny to improve initial loading behavior
+- `vite.config.js` defines manual chunks so major football and vendor code can be split more deliberately
+- The service worker generated in production intentionally excludes `sw.js` itself from the precache list
+- No standalone license file is currently included in the repository

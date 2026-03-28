@@ -176,7 +176,13 @@ export function getFootballKickoffTargetFlow(game, player) {
 }
 
 export function resetFootballKickoffFlow(game, snapPlayers = true, clearCelebration = true, deps) {
-  const { resetFootballBall, updateScoreboard, setGoalOverlayState, getFootballKickoffTarget } = deps;
+  const {
+    audioSystem,
+    resetFootballBall,
+    updateScoreboard,
+    setGoalOverlayState,
+    getFootballKickoffTarget
+  } = deps;
   const kickoffTeam = game.kickoffTeam || 0;
   const kickoffBallSpot = {
     x: game.kickoffBallSpot?.x ?? 0,
@@ -295,6 +301,7 @@ export function resetFootballKickoffFlow(game, snapPlayers = true, clearCelebrat
       timer: 0
     };
     if (game.coach) game.coach.whistleTimer = Math.max(game.coach.whistleTimer ?? 0, 0.58);
+    audioSystem?.playKickoffWhistle({ x: 0 });
   } else {
     game.ball.visible = true;
     game.ball.position.set(0, FOOTBALL_BALL_RADIUS, 0);

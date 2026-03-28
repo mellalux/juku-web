@@ -5,9 +5,13 @@ import {
   JUKU_BASE_Y,
   JUKU_SPEED,
   JUKU_TURN_SPEED,
-  JUMP_VELOCITY,
-  PICKUP_RADIUS
+  JUMP_VELOCITY
 } from "./game-config.js";
+import {
+  handlePickupAction,
+  syncPickupPresentation,
+  syncPickupRuntimeState
+} from "./pickup-system.js";
 
 function updateJukuArmPose(arm, side, state, hasSword) {
   const walkPhase = side === -1 ? state.walkCycle + Math.PI : state.walkCycle;
@@ -47,8 +51,10 @@ function updateJukuLegPose(leg, side, state) {
 
 export function updateJukuRuntime(
   dt,
-  { state, updateTouchEquipLabel, resolveJukuCollisions, clampGoalInteriorPosition }
+  { state, footballGame, updateTouchEquipLabel, resolveJukuCollisions, clampGoalInteriorPosition }
 ) {
+  syncPickupRuntimeState({ state, footballGame });
+
   state.faceTime += dt;
   if (state.blinkTimer > 0) {
     state.blinkTimer = Math.max(0, state.blinkTimer - dt);
@@ -84,28 +90,6 @@ export function updateJukuRuntime(
   state.prevEnter = enterNow;
 
   const eNow = state.keys.has("KeyE") || state.touchETrigger;
-  if (eNow && !state.prevE) {
-    if (state.swordHeld) {
-      const yawRad = THREE.MathUtils.degToRad(state.yaw);
-      const fx = Math.sin(yawRad);
-      const fz = Math.cos(yawRad);
-      const rx = Math.cos(yawRad);
-      const rz = -Math.sin(yawRad);
-      state.swordHeld = false;
-      state.swordX = state.x + rx * 0.34 + fx * 0.18;
-      state.swordZ = state.z + rz * 0.34 + fz * 0.18;
-      state.swordYaw = state.yaw - 24;
-    } else {
-      const dx = state.swordX - state.x;
-      const dz = state.swordZ - state.z;
-      if (dx * dx + dz * dz <= PICKUP_RADIUS * PICKUP_RADIUS) {
-        state.swordHeld = true;
-      }
-    }
-  }
-  state.prevE = eNow;
-  state.touchETrigger = false;
-  updateTouchEquipLabel();
 
   const crouchDur = 0.22;
   if (state.jumpState === 1) {
@@ -172,6 +156,16 @@ export function updateJukuRuntime(
   state.x = resolved.x;
   state.z = resolved.z;
 
+  if (eNow && !state.prevE) {
+    handlePickupAction({ state, footballGame });
+  } else {
+    syncPickupRuntimeState({ state, footballGame });
+  }
+
+  state.prevE = eNow;
+  state.touchETrigger = false;
+  updateTouchEquipLabel();
+
   if (moveInput !== 0) {
     state.walkBlend = Math.min(1, state.walkBlend + dt * 6.2);
     state.walkCycle += dt * 8.2 * Math.sign(moveInput);
@@ -212,14 +206,15 @@ function animateJukuSwordBlade(sword, swordWaveTime, brightness = 1) {
   }
 }
 
-export function updateJukuPoseRuntime({ state, juku, droppedSword, faceStatus }) {
+export function updateJukuPoseRuntime({ state, juku, footballGame, pickupSceneObjects, faceStatus }) {
+  const swordHeld = state.heldItemId === "sword";
   juku.root.position.set(state.x, JUKU_BASE_Y + state.jumpY - state.crouchBlend * 0.09, state.z);
   juku.root.rotation.y = THREE.MathUtils.degToRad(state.yaw);
 
   const blinkPhase = state.blinkTimer > 0 ? 1 - state.blinkTimer / 0.16 : 0;
   const blink = blinkPhase > 0 ? Math.sin(blinkPhase * Math.PI) : 0;
   let surprise = Math.max(state.airBlend, state.pushBlend * 0.85);
-  let focus = Math.max(state.walkBlend * 0.52, state.swordHeld ? 0.3 : 0);
+  let focus = Math.max(state.walkBlend * 0.52, state.heldItemId ? 0.3 : 0);
   let calm = 0;
   let angry = 0;
   let happy = 0;
@@ -316,18 +311,14 @@ export function updateJukuPoseRuntime({ state, juku, droppedSword, faceStatus })
   }
 
   updateJukuArmPose(juku.leftArm, 1, state, false);
-  updateJukuArmPose(juku.rightArm, -1, state, state.swordHeld);
+  updateJukuArmPose(juku.rightArm, -1, state, swordHeld);
 
   updateJukuLegPose(juku.leftLeg, 1, state);
   updateJukuLegPose(juku.rightLeg, -1, state);
 
   const swordWaveTime = state.faceTime * 0.34;
   animateJukuSwordBlade(juku.heldSword, swordWaveTime, 1);
-  animateJukuSwordBlade(droppedSword, swordWaveTime, 0.92);
+  animateJukuSwordBlade(pickupSceneObjects?.sword?.world, swordWaveTime, 0.92);
 
-  droppedSword.root.visible = !state.swordHeld;
-  droppedSword.root.position.set(state.swordX, 0.028, state.swordZ);
-  droppedSword.root.rotation.set(THREE.MathUtils.degToRad(12), THREE.MathUtils.degToRad(state.swordYaw), THREE.MathUtils.degToRad(90));
-  juku.heldSword.root.visible = state.swordHeld;
+  syncPickupPresentation({ state, footballGame, juku, pickupSceneObjects });
 }
-

@@ -6,7 +6,7 @@ export function createAppRuntime({
   state,
   footballGame,
   juku,
-  droppedSword,
+  pickupSceneObjects,
   camera,
   cameraRig,
   cameraStatus,
@@ -46,7 +46,7 @@ export function createAppRuntime({
   }
 
   function updateJukuPose() {
-    updateJukuPoseRuntime({ state, juku, droppedSword, faceStatus });
+    updateJukuPoseRuntime({ state, juku, footballGame, pickupSceneObjects, faceStatus });
   }
 
   return {

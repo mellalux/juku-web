@@ -1,5 +1,6 @@
 import * as THREE from "./three.js";
 import { createAppRuntime } from "./app-runtime.js";
+import { createAudioSystem } from "./audio-system.js";
 import { renderCamera3PipView } from "./camera-system.js";
 import { createFootballBridge } from "./football-bridge.js";
 import { createFootballBehaviorState } from "./football-behavior-state.js";
@@ -35,6 +36,7 @@ export async function bootApp() {
 
   const {
     attackStatus,
+    audioToggleButton,
     behaviorModeButtons,
     cameraStatus,
     canvas,
@@ -135,8 +137,19 @@ export async function bootApp() {
   const droppedSword = buildSword();
   droppedSword.root.visible = false;
   scene.add(droppedSword.root);
+  const pickupSceneObjects = {
+    sword: {
+      held: juku.heldSword,
+      world: droppedSword
+    },
+    ball: {
+      world: footballGame.ball
+    }
+  };
 
   const state = createInitialState();
+  const audioSystem = createAudioSystem();
+  audioSystem.installUnlockHandlers();
   const {
     getFootballBehavior,
     setFootballBehaviorPreset
@@ -164,7 +177,8 @@ export async function bootApp() {
     replayCard,
     replayFlash,
     scoreStatus,
-    getFootballBehavior
+    getFootballBehavior,
+    audioSystem
   });
 
   resetFootballKickoff(footballGame, true);
@@ -183,7 +197,11 @@ export async function bootApp() {
     camera,
     pipCamera,
     renderer,
+    audioToggleButton,
     behaviorModeButtons,
+    isAudioMuted: audioSystem.isMuted,
+    playUiSound: audioSystem.playUiClick,
+    toggleAudioMute: audioSystem.toggleMute,
     touchCameraButtons,
     touchCameraName,
     touchEquipButton,
@@ -205,7 +223,7 @@ export async function bootApp() {
     state,
     footballGame,
     juku,
-    droppedSword,
+    pickupSceneObjects,
     camera,
     cameraRig,
     cameraStatus,
@@ -226,6 +244,7 @@ export async function bootApp() {
     state.lastT = now;
     updateJuku(dt);
     updateFootballGame(footballGame, state.pauseFootball ? 0 : dt, state.pauseTrack ? 0 : dt);
+    audioSystem.update(dt, footballGame);
     state.trackTimer += state.pauseTrack ? 0 : dt;
     if (trackTimerValue) {
       trackTimerValue.textContent = formatTrackTime(state.trackTimer);

@@ -168,8 +168,31 @@ export function createUi() {
   trackTimerPanel.appendChild(trackTimerValue);
   document.body.appendChild(trackTimerPanel);
 
+  const audioToggleButton = document.createElement("button");
+  audioToggleButton.type = "button";
+  audioToggleButton.textContent = "SOUND ON";
+  audioToggleButton.style.position = "fixed";
+  audioToggleButton.style.right = "14px";
+  audioToggleButton.style.top = "88px";
+  audioToggleButton.style.zIndex = "12";
+  audioToggleButton.style.padding = "10px 14px";
+  audioToggleButton.style.border = "1px solid rgba(191,219,254,0.35)";
+  audioToggleButton.style.borderRadius = "999px";
+  audioToggleButton.style.background = "rgba(10, 16, 24, 0.84)";
+  audioToggleButton.style.color = "#f8fafc";
+  audioToggleButton.style.font = '800 11px/1 "Trebuchet MS", Verdana, sans-serif';
+  audioToggleButton.style.letterSpacing = "0.14em";
+  audioToggleButton.style.textIndent = "0.14em";
+  audioToggleButton.style.cursor = "pointer";
+  audioToggleButton.style.boxShadow = "0 10px 24px rgba(15,23,42,0.22)";
+  audioToggleButton.style.backdropFilter = "blur(10px)";
+  audioToggleButton.style.touchAction = "manipulation";
+  audioToggleButton.setAttribute("aria-pressed", "false");
+  document.body.appendChild(audioToggleButton);
+
   return {
     attackStatus,
+    audioToggleButton,
     behaviorModeButtons,
     cameraStatus,
     canvas,

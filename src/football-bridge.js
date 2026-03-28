@@ -48,7 +48,8 @@ export function createFootballBridge({
   replayCard,
   replayFlash,
   scoreStatus,
-  getFootballBehavior
+  getFootballBehavior,
+  audioSystem = null
 }) {
   const cameraWorldPos = new THREE.Vector3();
 
@@ -139,6 +140,7 @@ export function createFootballBridge({
 
   function resetFootballKickoff(game = footballGame, snapPlayers = true, clearCelebration = true) {
     resetFootballKickoffFlow(game, snapPlayers, clearCelebration, {
+      audioSystem,
       resetFootballBall,
       updateScoreboard,
       setGoalOverlayState,
@@ -147,6 +149,10 @@ export function createFootballBridge({
   }
 
   function startGoalCelebration(game, scoringTeam, scorer) {
+    audioSystem?.playGoal({
+      team: scoringTeam,
+      x: game?.ball?.position?.x ?? 0
+    });
     startGoalCelebrationFlow(game, scoringTeam, scorer, {
       resetFootballBall,
       setGoalOverlayState,
@@ -244,6 +250,11 @@ export function createFootballBridge({
         ? 1.34
         : 1.12;
     game.ballVel.y = loft * loftScale;
+    audioSystem?.playBallKick({
+      power,
+      loft,
+      x: game?.ball?.position?.x ?? 0
+    });
   }
 
   function resolveFootballRestartTeam(game) {
@@ -262,6 +273,7 @@ export function createFootballBridge({
 
   function startFootballRefRestart(game, outX, outZ) {
     if (game.refRestart?.active) return;
+    audioSystem?.playWhistle({ strong: true, x: outX });
     const restartTeamCandidate = resolveFootballRestartTeam(game);
     const liveBallY = game.ball.position.y;
     const liveBallVelX = game.ballVel.x;

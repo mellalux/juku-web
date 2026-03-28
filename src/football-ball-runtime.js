@@ -127,6 +127,16 @@ export function updateFootballBallRuntime(game, dt, deps) {
     updateScoreboard
   } = deps;
 
+  if (game.jukuBallHeld) {
+    if (game.ballHolder) {
+      game.ballHolder = null;
+      updateScoreboard(game);
+    }
+    game.ball.visible = true;
+    game.ballVel.set(0, 0, 0);
+    return { ballOutsideField: false, kickoffLocked: true, scored: false };
+  }
+
   game.restartHoldTimer = Math.max(0, (game.restartHoldTimer ?? 0) - dt);
   game.kickoffScriptTimer = Math.max(0, (game.kickoffScriptTimer ?? 0) - dt);
   game.kickoffReleaseTimer = Math.max(0, (game.kickoffReleaseTimer ?? 0) - dt);
@@ -719,6 +729,27 @@ export function updateFootballPossessionRuntime(game, dt, kickoffLocked, deps) {
       closestDist[p.team] = dist;
       closestToBall[p.team] = p;
     }
+  }
+
+  if (game.jukuBallHeld) {
+    if (game.ballHolder) {
+      game.ballHolder = null;
+      updateScoreboard(game);
+    }
+    if (game.attackingTeam !== 0) {
+      game.attackingTeam = 0;
+      updateScoreboard(game);
+    }
+    return {
+      activeBallPlayer: null,
+      ballHolder: null,
+      closestAnyDist,
+      closestAnyPlayer,
+      closestDist,
+      closestToBall,
+      controllingTeam: 0,
+      teamPlayers
+    };
   }
 
   let controllingTeam = 0;

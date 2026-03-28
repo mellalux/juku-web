@@ -2,7 +2,7 @@ export const WORLD_RADIUS = 150;
 export const WORLD_MOVE_LIMIT = WORLD_RADIUS - 3;
 export const JUKU_SPEED = 2.45;
 export const JUKU_TURN_SPEED = 130;
-export const PICKUP_RADIUS = 0.72;
+export const PICKUP_RADIUS = 1.85;
 export const GRAVITY = 9.8;
 export const JUMP_VELOCITY = 4.65;
 export const HUMAN_BASE_Y = -0.55;
@@ -174,10 +174,15 @@ export function createInitialState() {
     walkBlend: 0,
     turnCycle: 0,
     turnBlend: 0,
-    swordHeld: true,
-    swordX: 0.45,
-    swordZ: -2.8,
-    swordYaw: 18,
+    heldItemId: "sword",
+    nearbyPickupId: null,
+    pickupObjectStates: {
+      sword: {
+        x: 0.45,
+        z: -2.8,
+        yaw: 18
+      }
+    },
     activeCam: 1,
     cameraYaw: 90,
     cameraZoom: CAMERA_ZOOM_DEFAULTS[1],

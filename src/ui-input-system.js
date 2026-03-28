@@ -15,7 +15,11 @@ export function setupUiInputSystem({
   camera,
   pipCamera,
   renderer,
+  audioToggleButton,
   behaviorModeButtons,
+  isAudioMuted,
+  playUiSound,
+  toggleAudioMute,
   touchCameraButtons,
   touchCameraName,
   touchEquipButton,
@@ -28,6 +32,15 @@ export function setupUiInputSystem({
   touchZoomOutButton,
   setFootballBehaviorPreset
 }) {
+  function syncAudioToggleButton() {
+    if (!audioToggleButton) return;
+    const muted = Boolean(isAudioMuted?.());
+    audioToggleButton.textContent = muted ? "SOUND OFF" : "SOUND ON";
+    audioToggleButton.style.borderColor = muted ? "rgba(248,113,113,0.42)" : "rgba(191,219,254,0.35)";
+    audioToggleButton.style.color = muted ? "#fecaca" : "#f8fafc";
+    audioToggleButton.setAttribute("aria-pressed", muted ? "true" : "false");
+  }
+
   function setTouchJoystickVisual(x, y, active) {
     if (!touchJoystick || !touchJoystickThumb) return;
     touchJoystick.classList.toggle("is-active", active);
@@ -49,6 +62,15 @@ export function setupUiInputSystem({
   function setTouchEquipVisual(active) {
     if (!touchEquipButton) return;
     touchEquipButton.classList.toggle("is-active", active);
+  }
+
+  function setTouchEquipVisible(visible) {
+    if (!touchEquipButton) return;
+    const nextDisplay = visible ? "" : "none";
+    if (touchEquipButton.style.display !== nextDisplay) {
+      touchEquipButton.style.display = nextDisplay;
+    }
+    touchEquipButton.setAttribute("aria-hidden", visible ? "false" : "true");
   }
 
   function syncTouchFaceButtons() {
@@ -84,14 +106,15 @@ export function setupUiInputSystem({
 
   function updateTouchEquipLabel() {
     if (!touchEquipButton) return;
-    if (state.swordHeld) {
-      if (touchEquipButton.textContent !== "DROP") {
-        touchEquipButton.textContent = "DROP";
-      }
-      return;
+    const showButton = Boolean(state.heldItemId || state.nearbyPickupId);
+    if (!showButton) {
+      setTouchEquipVisual(false);
     }
-    if (touchEquipButton.textContent !== "PICK UP") {
-      touchEquipButton.textContent = "PICK UP";
+    setTouchEquipVisible(showButton);
+    if (!showButton) return;
+    const nextLabel = state.heldItemId ? "DROP" : "PICK UP";
+    if (touchEquipButton.textContent !== nextLabel) {
+      touchEquipButton.textContent = nextLabel;
     }
   }
 
@@ -130,6 +153,7 @@ export function setupUiInputSystem({
       state.cam2Yaw = THREE.MathUtils.degToRad(state.yaw);
     }
     syncTouchCameraButtons();
+    playUiSound?.(true);
   }
 
   function setFaceMode(mode) {
@@ -207,6 +231,11 @@ export function setupUiInputSystem({
     if (event.code === "KeyV") setFaceMode("auto");
     if (event.code === "KeyF" && !alreadyPressed) state.pauseFootball = !state.pauseFootball;
     if (event.code === "KeyR" && !alreadyPressed) state.pauseTrack = !state.pauseTrack;
+    if (event.code === "KeyM" && !alreadyPressed) {
+      toggleAudioMute?.();
+      syncAudioToggleButton();
+      if (!isAudioMuted?.()) playUiSound?.(true);
+    }
   });
 
   window.addEventListener("keyup", (event) => {
@@ -240,6 +269,7 @@ export function setupUiInputSystem({
       state.touchJumpPointerId = event.pointerId;
       touchJumpButton.setPointerCapture?.(event.pointerId);
       setTouchJumpVisual(true);
+      playUiSound?.();
       event.preventDefault();
     });
     touchJumpButton.addEventListener("pointerup", endJumpTouch);
@@ -259,6 +289,7 @@ export function setupUiInputSystem({
     touchEquipButton.addEventListener("pointerdown", (event) => {
       state.touchETrigger = true;
       setTouchEquipVisual(true);
+      playUiSound?.();
       event.preventDefault();
     });
     touchEquipButton.addEventListener("pointerup", endEquipTouch);
@@ -280,7 +311,10 @@ export function setupUiInputSystem({
   if (touchFaceButtons.length) {
     for (const button of touchFaceButtons) {
       button.addEventListener("pointerdown", (event) => {
-        if (button.dataset.face) setFaceMode(button.dataset.face);
+        if (button.dataset.face) {
+          setFaceMode(button.dataset.face);
+          playUiSound?.(true);
+        }
         event.preventDefault();
       });
     }
@@ -289,7 +323,10 @@ export function setupUiInputSystem({
   if (behaviorModeButtons.length) {
     for (const button of behaviorModeButtons) {
       button.addEventListener("pointerdown", (event) => {
-        if (button.dataset.behavior) setFootballBehaviorPreset(button.dataset.behavior);
+        if (button.dataset.behavior) {
+          setFootballBehaviorPreset(button.dataset.behavior);
+          playUiSound?.(true);
+        }
         event.preventDefault();
       });
     }
@@ -302,6 +339,7 @@ export function setupUiInputSystem({
   if (touchZoomInButton) {
     touchZoomInButton.addEventListener("pointerdown", (event) => {
       adjustTouchZoom(-0.14);
+      playUiSound?.();
       event.preventDefault();
     });
   }
@@ -309,6 +347,16 @@ export function setupUiInputSystem({
   if (touchZoomOutButton) {
     touchZoomOutButton.addEventListener("pointerdown", (event) => {
       adjustTouchZoom(0.14);
+      playUiSound?.();
+      event.preventDefault();
+    });
+  }
+
+  if (audioToggleButton) {
+    audioToggleButton.addEventListener("pointerdown", (event) => {
+      toggleAudioMute?.();
+      syncAudioToggleButton();
+      if (!isAudioMuted?.()) playUiSound?.(true);
       event.preventDefault();
     });
   }
@@ -336,6 +384,8 @@ export function setupUiInputSystem({
       resetTouchJoystick();
     });
   }
+
+  syncAudioToggleButton();
 
   return {
     adjustTouchZoom,
