@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -24,7 +25,16 @@ const template = await readFile(swTemplatePath, "utf8");
 const precacheUrls = await collectPrecacheUrlsFromDir(distDir, {
   exclude: ["sw.js"]
 });
-const serviceWorker = injectPrecacheUrls(template.replaceAll("__APP_VERSION__", version), precacheUrls);
+const buildId = createHash("sha1")
+  .update(precacheUrls.join("|"))
+  .digest("hex")
+  .slice(0, 10);
+const serviceWorker = injectPrecacheUrls(
+  template
+    .replaceAll("__APP_VERSION__", version)
+    .replaceAll("__APP_BUILD_ID__", buildId),
+  precacheUrls
+);
 await writeFile(swOutputPath, serviceWorker, "utf8");
 
 console.log(`[finalize-pwa-build] Wrote dist/sw.js with ${precacheUrls.length} precache entries`);

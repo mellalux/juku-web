@@ -18,6 +18,43 @@ const FOOTBALL_REF_GOAL_FRONT_GATE_CLEARANCE = 1.28 + FOOTBALL_GOAL_DEPTH * 0.46
 const FOOTBALL_REF_GOAL_BACK_GATE_CLEARANCE = 1.62 + FOOTBALL_GOAL_DEPTH * 0.64;
 const FOOTBALL_REF_GOAL_MOUTH_FRONT_CLEARANCE = 0.48;
 const FOOTBALL_REF_GOAL_MOUTH_INSIDE_CLEARANCE = 0.68;
+const FOOTBALL_REF_CARRY_OFFSET = new THREE.Vector3(0, -0.035, 0.1);
+const FOOTBALL_REF_CARRY_WORLD = new THREE.Vector3();
+const FOOTBALL_REF_CARRY_LEFT_WORLD = new THREE.Vector3();
+const FOOTBALL_REF_CARRY_RIGHT_WORLD = new THREE.Vector3();
+
+export function getFootballRefCarryWorldPosition(game, out = FOOTBALL_REF_CARRY_WORLD) {
+  const leftHand = game.coach?.runner?.leftArmRig?.handPivot;
+  const rightHand = game.coach?.runner?.rightArmRig?.handPivot;
+  const coachRoot = game.coach?.runner?.root;
+  if (!leftHand || !rightHand || !coachRoot) return null;
+
+  leftHand.updateWorldMatrix(true, false);
+  rightHand.updateWorldMatrix(true, false);
+  const leftWorld = leftHand.localToWorld(FOOTBALL_REF_CARRY_LEFT_WORLD.copy(FOOTBALL_REF_CARRY_OFFSET));
+  const rightWorld = rightHand.localToWorld(FOOTBALL_REF_CARRY_RIGHT_WORLD.copy(FOOTBALL_REF_CARRY_OFFSET));
+  out.copy(leftWorld).add(rightWorld).multiplyScalar(0.5);
+  out.x += Math.sin(coachRoot.rotation.y) * 0.05;
+  out.z += Math.cos(coachRoot.rotation.y) * 0.05;
+  out.y += 0.02;
+  return out;
+}
+
+export function applyFootballRefCarryPose(runner, carryBlend) {
+  const carryAmount = THREE.MathUtils.clamp(carryBlend ?? 0, 0, 1);
+  if (!runner || carryAmount <= 0.001) return;
+
+  runner.leftArm.rotation.x = THREE.MathUtils.lerp(runner.leftArm.rotation.x, -1.38, carryAmount);
+  runner.leftArm.rotation.z = THREE.MathUtils.lerp(runner.leftArm.rotation.z, 0.34, carryAmount);
+  runner.leftArm.rotation.y = THREE.MathUtils.lerp(runner.leftArm.rotation.y, 0.24, carryAmount);
+  runner.rightArm.rotation.x = THREE.MathUtils.lerp(runner.rightArm.rotation.x, -1.38, carryAmount);
+  runner.rightArm.rotation.z = THREE.MathUtils.lerp(runner.rightArm.rotation.z, -0.34, carryAmount);
+  runner.rightArm.rotation.y = THREE.MathUtils.lerp(runner.rightArm.rotation.y, -0.24, carryAmount);
+  runner.leftArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(runner.leftArmRig.lowerPivot.rotation.x, -1.02, carryAmount);
+  runner.rightArmRig.lowerPivot.rotation.x = THREE.MathUtils.lerp(runner.rightArmRig.lowerPivot.rotation.x, -1.02, carryAmount);
+  runner.torsoPivot.rotation.z = THREE.MathUtils.lerp(runner.torsoPivot.rotation.z, 0, carryAmount * 0.35);
+  runner.torsoPivot.rotation.x -= 0.06 * carryAmount;
+}
 
 export function getFootballPerimeterTFromPoint(x, z, offset = 1.15) {
   const halfW = FOOTBALL_FIELD_HALF_WIDTH + offset;

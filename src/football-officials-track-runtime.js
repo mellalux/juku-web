@@ -16,11 +16,14 @@ import {
   TRACK_RUNNER_LANE_CHANGE_RATE
 } from "./game-config.js";
 import {
+  applyFootballRefCarryPose,
+  getFootballRefCarryWorldPosition
+} from "./football-referee-runtime.js";
+import {
   commitInstancedMesh,
   setAnchoredInstanceTransform
 } from "./instanced-build.js";
 
-const FOOTBALL_REF_CARRY_OFFSET = new THREE.Vector3(0.02, -0.02, 0.12);
 const FOOTBALL_REF_CARRY_WORLD = new THREE.Vector3();
 const FOOTBALL_REF_PLACE_DURATION = 0.62;
 const FOOTBALL_HURDLE_CONTACT_SAMPLE_POINTS = [
@@ -123,13 +126,7 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
     }
     const carryBlend = THREE.MathUtils.clamp(game.coach.carryBlend ?? 0, 0, 1);
     if (carryBlend > 0.001) {
-      game.coach.runner.leftArm.rotation.x = THREE.MathUtils.lerp(game.coach.runner.leftArm.rotation.x, -1.12, carryBlend);
-      game.coach.runner.leftArm.rotation.z = THREE.MathUtils.lerp(game.coach.runner.leftArm.rotation.z, 0.38, carryBlend);
-      game.coach.runner.leftArm.rotation.y = THREE.MathUtils.lerp(game.coach.runner.leftArm.rotation.y, 0.32, carryBlend);
-      game.coach.runner.rightArm.rotation.x = THREE.MathUtils.lerp(game.coach.runner.rightArm.rotation.x, -0.46, carryBlend * 0.75);
-      game.coach.runner.rightArm.rotation.z = THREE.MathUtils.lerp(game.coach.runner.rightArm.rotation.z, -0.18, carryBlend * 0.75);
-      game.coach.runner.torsoPivot.rotation.z += 0.05 * carryBlend;
-      game.coach.runner.torsoPivot.rotation.x -= 0.04 * carryBlend;
+      applyFootballRefCarryPose(game.coach.runner, carryBlend);
     }
     game.coach.runner.head.rotation.y = THREE.MathUtils.clamp(-lookDx * 0.045 + game.coach.runner.head.rotation.y, -0.28, 0.28);
     game.coach.runner.head.rotation.x = THREE.MathUtils.clamp(game.coach.runner.head.rotation.x + moveSpeed * 0.01 - lookDz * 0.0035, -0.2, 0.08);
@@ -182,13 +179,12 @@ export function updateFootballOfficialsAndTrackRuntime(game, dt, trackDt, deps) 
       game.coach.carryBall.visible = false;
     }
     if (game.refRestart?.active && game.refRestart.phase === "toCenter") {
-      game.coach.runner.leftArmRig.handPivot.updateWorldMatrix(true, false);
-      const carryWorld = game.coach.runner.leftArmRig.handPivot.localToWorld(
-        FOOTBALL_REF_CARRY_WORLD.copy(FOOTBALL_REF_CARRY_OFFSET)
-      );
-      game.ball.visible = true;
-      game.ball.position.copy(carryWorld);
-      game.ballVel.set(0, 0, 0);
+      const carryWorld = getFootballRefCarryWorldPosition(game, FOOTBALL_REF_CARRY_WORLD);
+      if (carryWorld) {
+        game.ball.visible = true;
+        game.ball.position.copy(carryWorld);
+        game.ballVel.set(0, 0, 0);
+      }
     }
   }
 

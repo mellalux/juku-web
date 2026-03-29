@@ -12,7 +12,9 @@ import {
   GOAL_OVERLAY_DURATION
 } from "./game-config.js";
 import {
+  applyFootballRefCarryPose,
   getFootballRefBallRecoveryTargetRuntime,
+  getFootballRefCarryWorldPosition,
   getFootballRefPickupReachRuntime,
   getFootballRefPickupTargetRuntime,
   getFootballRefTravelTargetRuntime
@@ -22,7 +24,6 @@ import {
   setScoreboardLineView
 } from "./football-presentation.js";
 
-const FOOTBALL_CELEBRATION_CARRY_LOCAL = new THREE.Vector3(0.02, -0.02, 0.12);
 const FOOTBALL_CELEBRATION_CARRY_WORLD = new THREE.Vector3();
 
 function isInsideFootballCelebrationGoalPocket(x, z) {
@@ -526,6 +527,8 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
       game.coach.runner.leftArm.rotation.z *= 0.72;
       game.coach.runner.rightArm.rotation.z *= 0.72;
       game.coach.runner.torsoPivot.rotation.z *= 0.58;
+      game.coach.carryBlend = THREE.MathUtils.damp(game.coach.carryBlend ?? 0, celebration.refHasBall ? 1 : 0, 8.5, dt);
+      applyFootballRefCarryPose(game.coach.runner, game.coach.carryBlend ?? 0);
       if (coachChasingBall && Math.min(postMoveBallDist, postMovePickupDist) < refPickupDist) {
         celebration.refHasBall = true;
         celebration.refTask = "toCenter";
@@ -573,10 +576,8 @@ export function updateGoalCelebrationFlow(game, dt, deps) {
 
   game.ball.visible = true;
   if (celebration.phase === "reset" && game.coach && celebration.refHasBall) {
-    if (game.coach.runner.leftArmRig?.handPivot) {
-      game.coach.runner.leftArmRig.handPivot.updateWorldMatrix(true, false);
-      FOOTBALL_CELEBRATION_CARRY_WORLD.copy(FOOTBALL_CELEBRATION_CARRY_LOCAL);
-      game.coach.runner.leftArmRig.handPivot.localToWorld(FOOTBALL_CELEBRATION_CARRY_WORLD);
+    const carryWorld = getFootballRefCarryWorldPosition(game, FOOTBALL_CELEBRATION_CARRY_WORLD);
+    if (carryWorld) {
       game.ball.position.copy(FOOTBALL_CELEBRATION_CARRY_WORLD);
       game.ball.position.y = Math.max(game.ball.position.y, FOOTBALL_BALL_RADIUS + 0.72);
     } else {

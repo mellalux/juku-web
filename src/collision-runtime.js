@@ -12,6 +12,7 @@ import {
 const COLLISION_SCRATCH_RESULT = { x: 0, z: 0 };
 const COLLISION_SCRATCH_CLAMP = { x: 0, z: 0 };
 const COLLISION_PEOPLE_POOL = [];
+const ROADSTER_COLLISION_PADDING = 0.7;
 
 function getFootballGoalInteriorState(x, z) {
   const side = Math.sign(z || 0);
@@ -211,7 +212,7 @@ function applyGroundBallSeparationForPerson(game, person, constrainPerson) {
   return true;
 }
 
-function resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, radius, colliders, options = {}) {
+function resolveCircularCollisionsAtPointIntoRuntime(result, nextX, nextZ, radius, colliders, options = {}) {
   result.x = nextX;
   result.z = nextZ;
   if (!colliders || colliders.length === 0) return result;
@@ -248,8 +249,9 @@ function resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, radius, coll
       const relZ = result.z - collider.z;
       let localX = relX * cos + relZ * sin;
       let localZ = -relX * sin + relZ * cos;
-      const halfX = collider.halfX + radius;
-      const halfZ = collider.halfZ + radius;
+      const rolePadding = collider.role === "tracksideRoadster" ? ROADSTER_COLLISION_PADDING : 0;
+      const halfX = collider.halfX + radius + rolePadding;
+      const halfZ = collider.halfZ + radius + rolePadding;
 
       if (Math.abs(localX) <= halfX && Math.abs(localZ) <= halfZ) {
         const penX = halfX - Math.abs(localX);
@@ -268,6 +270,37 @@ function resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, radius, coll
     if (!moved) break;
   }
 
+  return result;
+}
+
+function resolveCircularCollisionsIntoRuntime(result, nextX, nextZ, radius, colliders, options = {}) {
+  const prevX = options.prevX;
+  const prevZ = options.prevZ;
+  const canMarch = Number.isFinite(prevX) && Number.isFinite(prevZ);
+  if (!canMarch) {
+    return resolveCircularCollisionsAtPointIntoRuntime(result, nextX, nextZ, radius, colliders, options);
+  }
+
+  const deltaX = nextX - prevX;
+  const deltaZ = nextZ - prevZ;
+  const distance = Math.hypot(deltaX, deltaZ);
+  const stepSize = Math.max(0.08, radius * 0.55);
+  const steps = Math.max(1, Math.ceil(distance / stepSize));
+  let currentX = prevX;
+  let currentZ = prevZ;
+  const stepX = deltaX / steps;
+  const stepZ = deltaZ / steps;
+
+  for (let i = 0; i < steps; i += 1) {
+    currentX += stepX;
+    currentZ += stepZ;
+    resolveCircularCollisionsAtPointIntoRuntime(result, currentX, currentZ, radius, colliders, options);
+    currentX = result.x;
+    currentZ = result.z;
+  }
+
+  result.x = currentX;
+  result.z = currentZ;
   return result;
 }
 
@@ -370,6 +403,15 @@ export function resolvePeopleCollisionsRuntime(
       const point = getTrackPointAtProgress(person.ref.laneIndex, person.ref.progress);
       person.x = point.x;
       person.z = point.z;
+      const resolved = resolveCircularCollisionsIntoRuntime(
+        COLLISION_SCRATCH_RESULT,
+        person.x,
+        person.z,
+        person.radius,
+        colliders
+      );
+      person.x = resolved.x;
+      person.z = resolved.z;
       return;
     }
     if (person.kind === "coach") {

@@ -6,10 +6,12 @@ import {
 } from "./game-config.js";
 
 const JUKU_HELD_BALL_FORWARD = 0.3;
-const JUKU_HELD_BALL_SIDE = 0.24;
-const JUKU_HELD_BALL_HEIGHT = 2.22;
-const JUKU_HELD_BALL_HAND_OFFSET = new THREE.Vector3(0.02, -0.02, 0.14);
+const JUKU_HELD_BALL_SIDE = 0;
+const JUKU_HELD_BALL_HEIGHT = 2.08;
+const JUKU_HELD_BALL_HAND_OFFSET = new THREE.Vector3(0, -0.04, 0.1);
 const JUKU_HELD_BALL_WORLD = new THREE.Vector3();
+const JUKU_HELD_BALL_LEFT_WORLD = new THREE.Vector3();
+const JUKU_HELD_BALL_RIGHT_WORLD = new THREE.Vector3();
 
 function getFacingBasis(yawDeg) {
   const yawRad = THREE.MathUtils.degToRad(yawDeg);
@@ -45,6 +47,23 @@ function updateHeldBallRuntimePosition(state, footballGame) {
   );
   footballGame.ballVel.set(0, 0, 0);
   footballGame.ballHolder = null;
+}
+
+function getJukuHeldBallPresentationWorld(juku, state, out = JUKU_HELD_BALL_WORLD) {
+  const leftHand = juku?.leftArm?.handPivot;
+  const rightHand = juku?.rightArm?.handPivot;
+  if (!leftHand || !rightHand) return null;
+
+  leftHand.updateWorldMatrix(true, false);
+  rightHand.updateWorldMatrix(true, false);
+  const leftWorld = leftHand.localToWorld(JUKU_HELD_BALL_LEFT_WORLD.copy(JUKU_HELD_BALL_HAND_OFFSET));
+  const rightWorld = rightHand.localToWorld(JUKU_HELD_BALL_RIGHT_WORLD.copy(JUKU_HELD_BALL_HAND_OFFSET));
+  out.copy(leftWorld).add(rightWorld).multiplyScalar(0.5);
+  const yawRad = THREE.MathUtils.degToRad(state.yaw);
+  out.x += Math.sin(yawRad) * 0.06;
+  out.z += Math.cos(yawRad) * 0.06;
+  out.y += 0.02;
+  return out;
 }
 
 function getPickupDefinitions({ state, footballGame, juku = null, pickupSceneObjects = null }) {
@@ -119,12 +138,11 @@ function getPickupDefinitions({ state, footballGame, juku = null, pickupSceneObj
         updateHeldBallRuntimePosition(state, footballGame);
       },
       syncPresentation() {
-        if (state.heldItemId !== "ball" || !footballGame?.ball || !juku?.rightArm?.handPivot) return;
-        juku.rightArm.handPivot.updateWorldMatrix(true, false);
+        if (state.heldItemId !== "ball" || !footballGame?.ball) return;
+        const carryWorld = getJukuHeldBallPresentationWorld(juku, state);
+        if (!carryWorld) return;
         footballGame.ball.visible = true;
-        footballGame.ball.position.copy(
-          juku.rightArm.handPivot.localToWorld(JUKU_HELD_BALL_WORLD.copy(JUKU_HELD_BALL_HAND_OFFSET))
-        );
+        footballGame.ball.position.copy(carryWorld);
         footballGame.ball.position.y = Math.max(FOOTBALL_BALL_RADIUS, footballGame.ball.position.y);
         footballGame.ballVel.set(0, 0, 0);
         footballGame.ballHolder = null;

@@ -184,6 +184,24 @@ function applyRoadsterSeatPose(juku, state) {
   );
 }
 
+function applyJukuBallCarryPose(juku, state) {
+  if (state.heldItemId !== "ball") return;
+
+  juku.torso.rotation.x = THREE.MathUtils.lerp(juku.torso.rotation.x, THREE.MathUtils.degToRad(-6), 0.28);
+  juku.torso.rotation.z = THREE.MathUtils.lerp(juku.torso.rotation.z, 0, 0.22);
+  juku.head.rotation.x = THREE.MathUtils.lerp(juku.head.rotation.x, THREE.MathUtils.degToRad(-3), 0.18);
+
+  juku.leftArm.upperPivot.rotation.x = THREE.MathUtils.lerp(juku.leftArm.upperPivot.rotation.x, THREE.MathUtils.degToRad(-68), 0.36);
+  juku.leftArm.upperPivot.rotation.y = THREE.MathUtils.lerp(juku.leftArm.upperPivot.rotation.y, THREE.MathUtils.degToRad(-20), 0.36);
+  juku.leftArm.upperPivot.rotation.z = THREE.MathUtils.lerp(juku.leftArm.upperPivot.rotation.z, THREE.MathUtils.degToRad(12), 0.36);
+  juku.leftArm.lowerPivot.rotation.x = THREE.MathUtils.lerp(juku.leftArm.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-82), 0.42);
+
+  juku.rightArm.upperPivot.rotation.x = THREE.MathUtils.lerp(juku.rightArm.upperPivot.rotation.x, THREE.MathUtils.degToRad(-68), 0.36);
+  juku.rightArm.upperPivot.rotation.y = THREE.MathUtils.lerp(juku.rightArm.upperPivot.rotation.y, THREE.MathUtils.degToRad(20), 0.36);
+  juku.rightArm.upperPivot.rotation.z = THREE.MathUtils.lerp(juku.rightArm.upperPivot.rotation.z, THREE.MathUtils.degToRad(-12), 0.36);
+  juku.rightArm.lowerPivot.rotation.x = THREE.MathUtils.lerp(juku.rightArm.lowerPivot.rotation.x, THREE.MathUtils.degToRad(-82), 0.42);
+}
+
 export function updateJukuRuntime(
   dt,
   {
@@ -527,6 +545,7 @@ export function updateJukuPoseRuntime({ state, juku, footballGame, pickupSceneOb
 
   updateJukuLegPose(juku.leftLeg, 1, state);
   updateJukuLegPose(juku.rightLeg, -1, state);
+  applyJukuBallCarryPose(juku, state);
   applyRoadsterSeatPose(juku, state);
 
   const swordWaveTime = state.faceTime * 0.34;

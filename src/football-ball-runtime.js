@@ -1,6 +1,7 @@
 import * as THREE from "./three.js";
 import { getFootballKickoffReadyPlayers } from "./football-flow.js";
 import {
+  getFootballRefCarryWorldPosition,
   getFootballRefPickupReachRuntime,
   getFootballRefPickupTargetRuntime
 } from "./football-referee-runtime.js";
@@ -20,7 +21,6 @@ import {
   FOOTBALL_GOAL_WIDTH
 } from "./game-config.js";
 
-const FOOTBALL_REF_CARRY_OFFSET = new THREE.Vector3(0.02, -0.02, 0.12);
 const FOOTBALL_REF_CARRY_WORLD = new THREE.Vector3();
 const FOOTBALL_REF_PLACE_DURATION = 0.62;
 
@@ -96,13 +96,6 @@ function getFootballLateGoalFallbackState(game, prevBallState = null) {
     }
   }
   return null;
-}
-
-function getFootballRefCarryWorldPosition(game, out = FOOTBALL_REF_CARRY_WORLD) {
-  const handPivot = game.coach?.runner?.leftArmRig?.handPivot;
-  if (!handPivot) return null;
-  handPivot.updateWorldMatrix(true, false);
-  return handPivot.localToWorld(out.copy(FOOTBALL_REF_CARRY_OFFSET));
 }
 
 function snapFootballToRefCarryPosition(game) {

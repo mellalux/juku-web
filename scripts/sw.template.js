@@ -1,4 +1,4 @@
-const CACHE_NAME = "juku-pwa-v__APP_VERSION__";
+const CACHE_NAME = "juku-pwa-v__APP_VERSION__-__APP_BUILD_ID__";
 const PRECACHE_URLS = __PRECACHE_URLS__;
 
 self.addEventListener("install", (event) => {

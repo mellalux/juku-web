@@ -3,6 +3,7 @@ export function createUi() {
   const cameraStatus = document.querySelector("#camera-status");
   const faceStatus = document.querySelector("#face-status");
   const scoreStatus = document.querySelector("#score-status");
+  const scoreboard = document.querySelector("#scoreboard");
   const attackStatus = document.querySelector("#attack-status");
   const playerStatus = document.querySelector("#player-status");
   const scoreboardTeamRed = document.querySelector("#scoreboard-team-red");
@@ -209,8 +210,10 @@ export function createUi() {
     replayCard,
     replayFlash,
     scoreStatus,
+    scoreboard,
     scoreboardTeamBlue,
     scoreboardTeamRed,
+    trackTimerPanel,
     trackTimerValue,
     touchCameraButtons,
     touchCameraName,

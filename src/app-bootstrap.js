@@ -52,8 +52,10 @@ export async function bootApp() {
     replayCard,
     replayFlash,
     scoreStatus,
+    scoreboard,
     scoreboardTeamBlue,
     scoreboardTeamRed,
+    trackTimerPanel,
     trackTimerValue,
     touchCameraButtons,
     touchCameraName,
@@ -247,6 +249,39 @@ export async function bootApp() {
     trackTimerValue.textContent = formatTrackTime(state.trackTimer ?? 0);
   }
 
+  function syncCameraOverlayVisibility() {
+    const hideCamera2Overlays = state.activeCam === 2;
+
+    if (scoreboard) {
+      const nextScoreboardDisplay = hideCamera2Overlays ? "none" : "";
+      if (scoreboard.style.display !== nextScoreboardDisplay) {
+        scoreboard.style.display = nextScoreboardDisplay;
+      }
+    }
+
+    if (trackTimerPanel) {
+      const nextTrackTimerDisplay = hideCamera2Overlays ? "none" : "flex";
+      if (trackTimerPanel.style.display !== nextTrackTimerDisplay) {
+        trackTimerPanel.style.display = nextTrackTimerDisplay;
+      }
+    }
+
+    if (hideCamera2Overlays) {
+      if (goalOverlay.style.display !== "none") {
+        goalOverlay.style.display = "none";
+      }
+      if (goalOverlay.style.opacity !== "0") {
+        goalOverlay.style.opacity = "0";
+      }
+      if (replayCard.style.display !== "none") {
+        replayCard.style.display = "none";
+      }
+      if (replayCard.style.opacity !== "0") {
+        replayCard.style.opacity = "0";
+      }
+    }
+  }
+
   function tick(now) {
     const dt = Math.min((now - state.lastT) / 1000, 0.05);
     state.lastT = now;
@@ -262,20 +297,23 @@ export async function bootApp() {
       updateGoalReplay(dt, footballGame);
     }
     updateCamera(dt);
+    syncCameraOverlayVisibility();
     updateJukuPose();
     renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
     renderer.setScissorTest(false);
     renderer.render(scene, camera);
     renderCamera3PipView({ state, pipFrame, pipCamera, camera, pipRenderer, scene });
-    renderGoalReplay3DView({
-      state,
-      game: footballGame,
-      pipCamera,
-      replayRenderer,
-      replayBadge,
-      replayCard,
-      scene
-    });
+    if (state.activeCam !== 2) {
+      renderGoalReplay3DView({
+        state,
+        game: footballGame,
+        pipCamera,
+        replayRenderer,
+        replayBadge,
+        replayCard,
+        scene
+      });
+    }
     requestAnimationFrame(tick);
   }
 
